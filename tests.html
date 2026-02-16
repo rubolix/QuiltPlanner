@@ -76,10 +76,21 @@ function cutSize(piece, seam) {
       const hstCut = piece.finW + 0.875;
       return { w: hstCut, h: hstCut, yieldsTwo: true };
     }
+    case 'qst': {
+      const qstCut = piece.finW + 1.25;
+      return { w: qstCut, h: qstCut, yieldsFour: true };
+    }
     case 'flygeese': {
       const fgLg = piece.finW + 1.25;
       const fgSm = piece.finH + 0.875;
       return { w: fgLg, h: fgLg, smallW: fgSm, smallH: fgSm, yieldsFour: true };
+    }
+    case 'strip': {
+      return { w: piece.finW + 2*s, h: piece.finH + 2*s, isStrip: true };
+    }
+    case 'circle': {
+      const diam = piece.finW + 0.75;
+      return { w: diam, h: diam };
     }
     default:
       return { w: piece.finW + 2*s, h: piece.finW + 2*s };
@@ -166,6 +177,25 @@ cs = cutSize({ type: 'flygeese', finW: 6, finH: 3 }, 0.25);
 assertClose(cs.w, 7.25, 0.01, 'FG large square: 6 + 1¼ = 7¼″');
 assertClose(cs.smallW, 3.875, 0.01, 'FG small square: 3 + ⅞ = 3⅞″');
 assert(cs.yieldsFour === true, 'FG yields 4 geese from large square');
+
+section('✂️ cutSize — Quarter-Square Triangle');
+cs = cutSize({ type: 'qst', finW: 6 }, 0.25);
+assertClose(cs.w, 7.25, 0.01, 'QST 6″ finished → 7¼″ cut (fin + 1¼)');
+assert(cs.yieldsFour === true, 'QST yields 4 triangles per square');
+cs = cutSize({ type: 'qst', finW: 3 }, 0.25);
+assertClose(cs.w, 4.25, 0.01, 'QST 3″ finished → 4¼″ cut');
+
+section('✂️ cutSize — Strip Set');
+cs = cutSize({ type: 'strip', finW: 10, finH: 2 }, 0.25);
+assertClose(cs.w, 10.5, 0.01, 'Strip 10″ finished → 10½″ sub-cut width');
+assertClose(cs.h, 2.5, 0.01, 'Strip 2″ finished → 2½″ strip height');
+assert(cs.isStrip === true, 'Strip has isStrip flag');
+
+section('✂️ cutSize — Appliqué Circle');
+cs = cutSize({ type: 'circle', finW: 6 }, 0.25);
+assertClose(cs.w, 6.75, 0.01, 'Circle 6″ finished → 6¾″ cut square (fin + ¾)');
+cs = cutSize({ type: 'circle', finW: 3 }, 0.25);
+assertClose(cs.w, 3.75, 0.01, 'Circle 3″ finished → 3¾″ cut square');
 
 section('🔲 Grid Calculation');
 let g = calcGrid(50, 65, 12, 0, 0);

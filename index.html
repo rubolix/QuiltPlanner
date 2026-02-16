@@ -203,7 +203,10 @@ footer a { color: var(--teal); }
     <option value="square">Square</option>
     <option value="rect">Rectangle</option>
     <option value="hst">Half-Square Triangle (HST)</option>
+    <option value="qst">Quarter-Square Triangle (QST)</option>
     <option value="flygeese">Flying Geese</option>
+    <option value="strip">Strip Set</option>
+    <option value="circle">Appliqué Circle</option>
   </select>
   <div id="pieceDimFields">
     <div class="row">
@@ -251,6 +254,9 @@ footer a { color: var(--teal); }
     <button class="btn btn-outline btn-sm" onclick="loadExample('churn')">Churn Dash</button>
     <button class="btn btn-outline btn-sm" onclick="loadExample('bear')">Bear's Paw</button>
     <button class="btn btn-outline btn-sm" onclick="loadExample('ohio')">Ohio Star</button>
+    <button class="btn btn-outline btn-sm" onclick="loadExample('kaleidoscope')">Kaleidoscope (QST)</button>
+    <button class="btn btn-outline btn-sm" onclick="loadExample('stripgarden')">Strip Garden</button>
+    <button class="btn btn-outline btn-sm" onclick="loadExample('modernapplique')">Modern Appliqué</button>
   </div>
   <div class="import-export-group">
     <button class="btn btn-outline" onclick="exportJSON()">📋 Export JSON</button>
@@ -300,7 +306,10 @@ footer a { color: var(--teal); }
       <option value="square">Square</option>
       <option value="rect">Rectangle</option>
       <option value="hst">Half-Square Triangle (HST)</option>
+      <option value="qst">Quarter-Square Triangle (QST)</option>
       <option value="flygeese">Flying Geese</option>
+      <option value="strip">Strip Set</option>
+      <option value="circle">Appliqué Circle</option>
     </select>
     <div class="row">
       <div><label>Finished Width (in)</label><input type="number" id="editFinW" min="0.5" step="0.25"></div>
@@ -363,39 +372,44 @@ function applyPreset(w, h, el) {
 
 function onPieceTypeChange() {
   const type = document.getElementById('pieceType').value;
-  document.getElementById('pieceFinHWrap').style.display = (type === 'rect' || type === 'flygeese') ? '' : 'none';
-  document.getElementById('hstFabric2').style.display = (type === 'hst') ? '' : 'none';
-  // Update tip
+  document.getElementById('pieceFinHWrap').style.display = (type === 'rect' || type === 'flygeese' || type === 'strip') ? '' : 'none';
+  document.getElementById('hstFabric2').style.display = (type === 'hst' || type === 'qst') ? '' : 'none';
   const tips = {
     square: '💡 Squares are cut at finished size + ½″ (two seam allowances).',
     rect: '💡 Rectangles are cut at finished size + ½″ in each dimension.',
     hst: '💡 HSTs are cut from squares ⅞″ larger than finished size, yielding 2 triangles per square.',
-    flygeese: '💡 Flying Geese use the "no-waste" method: 1 large square (cut ╳) + 4 small squares.'
+    qst: '💡 QSTs are cut from squares 1¼″ larger than finished, cut ╳ to yield 4 quarter-triangles.',
+    flygeese: '💡 Flying Geese use the "no-waste" method: 1 large square (cut ╳) + 4 small squares.',
+    strip: '💡 Strip sets: cut full-width strips, sew together, then sub-cut into segments.',
+    circle: '💡 Appliqué circles: cut square large enough to contain circle + turn-under allowance.'
   };
   document.getElementById('pieceTip').textContent = tips[type] || '';
   if (type === 'flygeese') {
     document.getElementById('pieceFinH').value = document.getElementById('pieceFinW').value / 2;
   }
+  if (type === 'strip') {
+    document.getElementById('pieceFinH').value = 2.5;
+  }
 }
 
 function onEditTypeChange() {
   const type = document.getElementById('editType').value;
-  document.getElementById('editFinHWrap').style.display = (type === 'rect' || type === 'flygeese') ? '' : 'none';
-  document.getElementById('editHst2').style.display = (type === 'hst') ? '' : 'none';
+  document.getElementById('editFinHWrap').style.display = (type === 'rect' || type === 'flygeese' || type === 'strip') ? '' : 'none';
+  document.getElementById('editHst2').style.display = (type === 'hst' || type === 'qst') ? '' : 'none';
 }
 
 // ── Piece Management ──
 function addPiece() {
   const type = document.getElementById('pieceType').value;
   const finW = parseFloat(document.getElementById('pieceFinW').value);
-  const finH = (type === 'rect' || type === 'flygeese') ? parseFloat(document.getElementById('pieceFinH').value) : finW;
+  const finH = (type === 'rect' || type === 'flygeese' || type === 'strip') ? parseFloat(document.getElementById('pieceFinH').value) : finW;
   const qty = parseInt(document.getElementById('pieceQty').value) || 1;
   const color = document.getElementById('pieceColor').value;
   const name = document.getElementById('pieceFabricName').value || 'Unnamed';
 
   const piece = { type, finW, finH, qty, color, name };
 
-  if (type === 'hst') {
+  if (type === 'hst' || type === 'qst') {
     piece.color2 = document.getElementById('pieceColor2').value;
     piece.name2 = document.getElementById('pieceFabricName2').value || 'Unnamed B';
   }
@@ -435,11 +449,11 @@ function saveEdit() {
   const p = blockPieces[editingIndex];
   p.type = type;
   p.finW = parseFloat(document.getElementById('editFinW').value);
-  p.finH = (type === 'rect' || type === 'flygeese') ? parseFloat(document.getElementById('editFinH').value) : p.finW;
+  p.finH = (type === 'rect' || type === 'flygeese' || type === 'strip') ? parseFloat(document.getElementById('editFinH').value) : p.finW;
   p.qty = parseInt(document.getElementById('editQty').value) || 1;
   p.color = document.getElementById('editColor').value;
   p.name = document.getElementById('editName').value || 'Unnamed';
-  if (type === 'hst') {
+  if (type === 'hst' || type === 'qst') {
     p.color2 = document.getElementById('editColor2').value;
     p.name2 = document.getElementById('editName2').value || 'Unnamed B';
   } else {
@@ -462,9 +476,9 @@ function renderPiecesList() {
     return;
   }
   list.innerHTML = blockPieces.map((p, i) => {
-    const typeLabel = { square: 'Square', rect: 'Rect', hst: 'HST', flygeese: 'Flying Geese' }[p.type];
-    const dims = p.type === 'square' ? `${fmtDim(p.finW)}″` : `${fmtDim(p.finW)}×${fmtDim(p.finH)}″`;
-    const hstExtra = p.type === 'hst' ? ` <span class="swatch" style="background:${p.color2};display:inline-block;vertical-align:middle;"></span> ${esc(p.name2)}` : '';
+    const typeLabel = { square: 'Square', rect: 'Rect', hst: 'HST', qst: 'QST', flygeese: 'Flying Geese', strip: 'Strip', circle: 'Circle' }[p.type];
+    const dims = (p.type === 'square' || p.type === 'circle') ? `${fmtDim(p.finW)}″` : `${fmtDim(p.finW)}×${fmtDim(p.finH)}″`;
+    const hstExtra = (p.type === 'hst' || p.type === 'qst') ? ` <span class="swatch" style="background:${p.color2};display:inline-block;vertical-align:middle;"></span> ${esc(p.name2)}` : '';
     return `<div class="piece-item">
       <div class="swatch" style="background:${p.color}"></div>
       <div class="dims">${typeLabel} ${dims} ×${p.qty}</div>
@@ -489,6 +503,10 @@ function cutSize(piece, seam) {
       const hstCut = piece.finW + 0.875;
       return { w: hstCut, h: hstCut, yieldsTwo: true, note: `Cut ${fmtDim(hstCut)}″ sq, cut ╲ = 2 HSTs` };
     }
+    case 'qst': {
+      const qstCut = piece.finW + 1.25;
+      return { w: qstCut, h: qstCut, yieldsFour: true, note: `Cut ${fmtDim(qstCut)}″ sq, cut ╳ = 4 QSTs` };
+    }
     case 'flygeese': {
       const fgLg = piece.finW + 1.25;
       const fgSm = piece.finH + 0.875;
@@ -496,6 +514,13 @@ function cutSize(piece, seam) {
         w: fgLg, h: fgLg, smallW: fgSm, smallH: fgSm, yieldsFour: true,
         note: `Lg: ${fmtDim(fgLg)}″ sq (╳ = 4), Sm: ${fmtDim(fgSm)}″ sq (╲ = 2)`
       };
+    }
+    case 'strip': {
+      return { w: piece.finW + 2*s, h: piece.finH + 2*s, isStrip: true, note: `Cut ${fmtDim(piece.finH + 2*s)}″ strip × WOF, sub-cut to ${fmtDim(piece.finW + 2*s)}″` };
+    }
+    case 'circle': {
+      const diam = piece.finW + 0.75; // ⅜″ turn-under per side
+      return { w: diam, h: diam, note: `Cut ${fmtDim(diam)}″ square for ${fmtDim(piece.finW)}″ appliqué circle` };
     }
     default:
       return { w: piece.finW + 2*s, h: piece.finW + 2*s, note: '' };
@@ -559,6 +584,10 @@ function calculate() {
       const squaresNeeded = Math.ceil(totalQty / 2);
       getFabric(piece.name, piece.color).cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'hst' });
       getFabric(piece.name2, piece.color2).cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'hst' });
+    } else if (piece.type === 'qst') {
+      const squaresNeeded = Math.ceil(totalQty / 4);
+      getFabric(piece.name, piece.color).cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'qst' });
+      getFabric(piece.name2, piece.color2).cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'qst' });
     } else if (piece.type === 'flygeese') {
       const lgNeeded = Math.ceil(totalQty / 4);
       const smNeeded = totalQty * 2;
@@ -765,12 +794,31 @@ function drawBlockPreview(ctx, x, y, size, pieces) {
         ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx+cellW, cy); ctx.lineTo(cx, cy+cellH); ctx.closePath(); ctx.fill();
         ctx.fillStyle = piece.color2;
         ctx.beginPath(); ctx.moveTo(cx+cellW, cy); ctx.lineTo(cx+cellW, cy+cellH); ctx.lineTo(cx, cy+cellH); ctx.closePath(); ctx.fill();
+      } else if (piece.type === 'qst') {
+        const mx = cx+cellW/2, my = cy+cellH/2;
+        ctx.fillStyle = piece.color;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(mx, my); ctx.lineTo(cx, cy+cellH); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx+cellW, cy); ctx.lineTo(mx, my); ctx.lineTo(cx+cellW, cy+cellH); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = piece.color2;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx+cellW, cy); ctx.lineTo(mx, my); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx, cy+cellH); ctx.lineTo(cx+cellW, cy+cellH); ctx.lineTo(mx, my); ctx.closePath(); ctx.fill();
       } else if (piece.type === 'flygeese') {
         ctx.fillStyle = piece.color;
         ctx.beginPath(); ctx.moveTo(cx+cellW/2, cy); ctx.lineTo(cx+cellW, cy+cellH); ctx.lineTo(cx, cy+cellH); ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#e0ddd8';
         ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx+cellW/2, cy); ctx.lineTo(cx, cy+cellH); ctx.closePath(); ctx.fill();
         ctx.beginPath(); ctx.moveTo(cx+cellW/2, cy); ctx.lineTo(cx+cellW, cy); ctx.lineTo(cx+cellW, cy+cellH); ctx.closePath(); ctx.fill();
+      } else if (piece.type === 'strip') {
+        ctx.fillStyle = piece.color;
+        ctx.fillRect(cx, cy, cellW, cellH);
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < 3; i++) { ctx.beginPath(); ctx.moveTo(cx, cy+cellH*i/3); ctx.lineTo(cx+cellW, cy+cellH*i/3); ctx.stroke(); }
+      } else if (piece.type === 'circle') {
+        ctx.fillStyle = '#e0ddd8';
+        ctx.fillRect(cx, cy, cellW, cellH);
+        ctx.fillStyle = piece.color;
+        ctx.beginPath(); ctx.arc(cx+cellW/2, cy+cellH/2, Math.min(cellW,cellH)*0.42, 0, Math.PI*2); ctx.fill();
       } else {
         ctx.fillStyle = piece.color;
         ctx.fillRect(cx, cy, cellW, cellH);
@@ -877,6 +925,31 @@ function loadExample(name) {
         { type: 'square', finW: 4, finH: 4, qty: 4, color: '#f5f0e6', name: 'Background' },
         { type: 'hst', finW: 4, finH: 4, qty: 4, color: '#5b8a8a', name: 'Teal', color2: '#f5f0e6', name2: 'Background' },
         { type: 'flygeese', finW: 8, finH: 4, qty: 4, color: '#5b8a8a', name: 'Teal' },
+      ]
+    },
+    kaleidoscope: {
+      quiltW: 60, quiltH: 72, blockSize: 12, sashW: 1, borderW: 3, bindingW: 2.5,
+      pieces: [
+        { type: 'qst', finW: 6, finH: 6, qty: 4, color: '#7b2d8e', name: 'Purple', color2: '#f5f0e6', name2: 'Background' },
+        { type: 'square', finW: 6, finH: 6, qty: 0, color: '#f5f0e6', name: 'Background' },
+      ]
+    },
+    stripgarden: {
+      quiltW: 50, quiltH: 65, blockSize: 10, sashW: 0, borderW: 3, bindingW: 2.5,
+      pieces: [
+        { type: 'strip', finW: 10, finH: 2, qty: 1, color: '#5b8a8a', name: 'Teal' },
+        { type: 'strip', finW: 10, finH: 2, qty: 1, color: '#c87941', name: 'Burnt Gold' },
+        { type: 'strip', finW: 10, finH: 2, qty: 1, color: '#9caf88', name: 'Sage' },
+        { type: 'strip', finW: 10, finH: 2, qty: 1, color: '#f5f0e6', name: 'Cream' },
+        { type: 'strip', finW: 10, finH: 2, qty: 1, color: '#5b4a3c', name: 'Brown' },
+      ]
+    },
+    modernapplique: {
+      quiltW: 36, quiltH: 52, blockSize: 10, sashW: 2, borderW: 3, bindingW: 2.5,
+      pieces: [
+        { type: 'square', finW: 10, finH: 10, qty: 1, color: '#f5f0e6', name: 'Background' },
+        { type: 'circle', finW: 6, finH: 6, qty: 1, color: '#c0392b', name: 'Red Circle' },
+        { type: 'circle', finW: 3, finH: 3, qty: 2, color: '#9caf88', name: 'Sage Dots' },
       ]
     },
   };
