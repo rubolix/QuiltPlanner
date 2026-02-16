@@ -364,6 +364,9 @@ function init() {
     `<button class="preset" onclick="applyPreset(${p.w},${p.h},this)">${p.label} (${p.w}×${p.h})</button>`
   ).join('') + `<button class="preset" onclick="applyPreset(0,0,this)">Custom</button>`;
 
+  // Default to Throw (50×65) — most common general-purpose quilt size
+  syncPresetHighlight(50, 65);
+
   document.getElementById('pieceType').addEventListener('change', onPieceTypeChange);
   onPieceTypeChange();
 }
@@ -375,6 +378,20 @@ function applyPreset(w, h, el) {
   }
   document.querySelectorAll('.preset').forEach(e => e.classList.remove('active'));
   if (el) el.classList.add('active');
+}
+
+function syncPresetHighlight(w, h) {
+  const btns = document.querySelectorAll('.preset');
+  let matched = false;
+  btns.forEach(btn => {
+    btn.classList.remove('active');
+    const m = btn.textContent.match(/(\d+)×(\d+)/);
+    if (m && parseInt(m[1]) === w && parseInt(m[2]) === h) {
+      btn.classList.add('active');
+      matched = true;
+    }
+  });
+  if (!matched) btns[btns.length - 1].classList.add('active'); // "Custom"
 }
 
 function onPieceTypeChange() {
@@ -869,34 +886,65 @@ function drawBlockPreviewLarge() {
 function drawQuiltPreview(quiltW, quiltH, blockSz, rows, cols, sashW, borderW) {
   const canvas = document.getElementById('quiltCanvas');
   if (!canvas) return;
+  const pad = 28; // space for dimension labels
   const maxW = 600, maxH = 500;
   const scale = Math.min(maxW / quiltW, maxH / quiltH);
   const w = Math.round(quiltW * scale), h = Math.round(quiltH * scale);
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = w + pad;
+  canvas.height = h + pad;
   const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Offset quilt drawing to leave room for labels
+  const ox = 0, oy = 0;
 
   const borderColor = document.getElementById('borderColor').value;
   ctx.fillStyle = borderW > 0 ? borderColor : '#e0ddd8';
-  ctx.fillRect(0, 0, w, h);
+  ctx.fillRect(ox, oy, w, h);
 
   const bdr = borderW * scale, sash = sashW * scale, blk = blockSz * scale;
   if (sashW > 0) {
     ctx.fillStyle = document.getElementById('sashColor').value;
-    ctx.fillRect(bdr, bdr, w - 2*bdr, h - 2*bdr);
+    ctx.fillRect(ox + bdr, oy + bdr, w - 2*bdr, h - 2*bdr);
   }
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      drawBlockPreview(ctx, bdr + c*(blk+sash), bdr + r*(blk+sash), blk, blockPieces);
+      drawBlockPreview(ctx, ox + bdr + c*(blk+sash), oy + bdr + r*(blk+sash), blk, blockPieces);
     }
   }
 
   if (borderW > 0) {
     ctx.strokeStyle = 'rgba(0,0,0,0.15)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(bdr, bdr, w - 2*bdr, h - 2*bdr);
+    ctx.strokeRect(ox + bdr, oy + bdr, w - 2*bdr, h - 2*bdr);
   }
+
+  // Dimension labels
+  ctx.fillStyle = '#5a554e';
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  // Width label (bottom)
+  ctx.fillText(`${quiltW}″`, ox + w/2, oy + h + 6);
+  // Arrows for width
+  const ay = oy + h + 4;
+  ctx.strokeStyle = '#5a554e'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(ox + 2, ay); ctx.lineTo(ox + w - 2, ay); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ox + 2, ay - 3); ctx.lineTo(ox + 2, ay + 3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ox + w - 2, ay - 3); ctx.lineTo(ox + w - 2, ay + 3); ctx.stroke();
+  // Height label (right side)
+  ctx.save();
+  ctx.translate(ox + w + 14, oy + h/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`${quiltH}″`, 0, 0);
+  ctx.restore();
+  // Arrows for height
+  const ax = ox + w + 4;
+  ctx.beginPath(); ctx.moveTo(ax, oy + 2); ctx.lineTo(ax, oy + h - 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ax - 3, oy + 2); ctx.lineTo(ax + 3, oy + 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ax - 3, oy + h - 2); ctx.lineTo(ax + 3, oy + h - 2); ctx.stroke();
 }
 
 function drawBlockPreview(ctx, x, y, size, pieces) {
@@ -1089,6 +1137,7 @@ function loadExample(name) {
   document.getElementById('borderW').value = ex.borderW;
   document.getElementById('bindingW').value = ex.bindingW;
   blockPieces = ex.pieces.filter(p => p.qty > 0).map(p => ({ ...p }));
+  syncPresetHighlight(ex.quiltW, ex.quiltH);
   renderPiecesList();
   calculate();
 }
@@ -1159,6 +1208,7 @@ function doImport() {
     document.getElementById('bindingFabricName').value = data.bindingFabricName || 'Binding';
     document.getElementById('calcBacking').checked = data.calcBacking !== false;
     blockPieces = data.pieces;
+    syncPresetHighlight(data.quiltW || 50, data.quiltH || 65);
     renderPiecesList();
     closeImportModal();
     calculate();
