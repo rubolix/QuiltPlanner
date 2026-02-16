@@ -153,6 +153,35 @@ footer a { color: var(--teal); }
   </div>
   <p class="tip">💡 WOF is the usable width of your fabric (usually 42″ for quilting cotton).</p>
   <hr class="section-divider">
+  <h2>🔷 Layout & Arrangement</h2>
+  <div class="row">
+    <div>
+      <label>Layout Style</label>
+      <select id="layoutStyle">
+        <option value="straight">Straight Set (default)</option>
+        <option value="onpoint">On-Point (diagonal)</option>
+      </select>
+    </div>
+    <div>
+      <label>Block Arrangement</label>
+      <select id="blockArrangement">
+        <option value="uniform">All Same</option>
+        <option value="rotate90">Rotate 90° Alternating</option>
+        <option value="rotate180">Rotate 180° Alternating</option>
+        <option value="pinwheel">Pinwheel (4-block rotation)</option>
+        <option value="mirror-h">Mirror Horizontal</option>
+        <option value="mirror-v">Mirror Vertical</option>
+      </select>
+    </div>
+  </div>
+  <div id="onpointBgFabric" style="display:none;">
+    <label>Background Fabric (setting/corner triangles)</label>
+    <div class="color-input-wrap">
+      <input type="color" id="onpointBgColor" value="#f5f0e6">
+      <input type="text" id="onpointBgName" value="Background" placeholder="Name">
+    </div>
+  </div>
+  <hr class="section-divider">
   <h2>🔲 Sashing & Borders</h2>
   <div class="row">
     <div>
@@ -203,6 +232,14 @@ footer a { color: var(--teal); }
 <div class="panel no-print">
   <h2>🧩 Block Designer</h2>
   <p style="font-size:0.82rem;color:var(--muted);margin-bottom:12px;">Define the pieces in one block. The block repeats across the quilt grid.</p>
+  <label><input type="checkbox" id="useAltBlock" onchange="toggleAltBlock()"> Use alternating blocks (A/B checkerboard)</label>
+  <div id="altBlockTarget" style="display:none;margin-bottom:8px;">
+    <label>Add piece to:</label>
+    <select id="pieceBlockTarget">
+      <option value="A">Block A</option>
+      <option value="B">Block B</option>
+    </select>
+  </div>
   <label>Piece Type</label>
   <div style="display:flex;align-items:center;gap:10px;">
     <select id="pieceType" style="flex:1;">
@@ -240,9 +277,31 @@ footer a { color: var(--teal); }
     <button class="btn btn-accent" onclick="addPiece()">+ Add Piece</button>
     <button class="btn btn-outline" onclick="clearPieces()">Clear All</button>
     <button class="btn btn-outline" onclick="randomizeColors()" title="Shuffle fabric colors across existing pieces">🎲 Randomize Colors</button>
+    <button class="btn btn-outline btn-sm" onclick="openPaletteExtractor()">🎨 Extract Palette from Photo</button>
   </div>
   <div id="piecesList" style="margin-top:12px;"></div>
   <p class="tip" id="pieceTip">💡 HSTs are cut from squares ⅞″ larger than finished size, yielding 2 triangles per square.</p>
+</div>
+
+<!-- Fabric Stash Tracker -->
+<div class="panel no-print">
+  <details id="stashDetails">
+    <summary style="cursor:pointer;color:var(--teal);font-weight:600;">📦 My Fabric Stash</summary>
+    <div style="margin-top:12px;">
+      <div id="stashList" style="margin-bottom:12px;"></div>
+      <hr class="section-divider">
+      <label style="margin-top:0;">Add to Stash</label>
+      <div class="row">
+        <div><input type="text" id="stashAddName" placeholder="Fabric name"></div>
+        <div><div class="color-input-wrap"><input type="color" id="stashAddColor" value="#c87941"><input type="number" id="stashAddYards" placeholder="Yards" min="0" step="0.125" style="width:80px;"></div></div>
+      </div>
+      <div class="actions" style="margin-top:8px;">
+        <button class="btn btn-sm btn-accent" onclick="addStashEntry()">+ Add</button>
+        <button class="btn btn-sm btn-outline" onclick="exportStash()">Export Stash</button>
+        <button class="btn btn-sm btn-outline" onclick="importStash()">Import Stash</button>
+      </div>
+    </div>
+  </details>
 </div>
 
 <!-- Actions -->
@@ -378,11 +437,42 @@ hst,6,6,4,#c0392b,Red,#f5f0e6,White"></textarea>
   </div>
 </div>
 
+<!-- Palette Extractor Modal -->
+<div class="modal-overlay" id="paletteModal">
+  <div class="modal">
+    <h3>🎨 Extract Palette from Photo</h3>
+    <p style="font-size:0.85rem;color:var(--muted);margin-bottom:12px;">Upload a photo to extract dominant colors for your quilt fabrics.</p>
+    <input type="file" id="paletteFileInput" accept="image/*" style="margin-bottom:12px;" onchange="extractPalette(this)">
+    <canvas id="paletteHiddenCanvas" style="display:none;"></canvas>
+    <div id="palettePreview" style="margin-bottom:12px;"></div>
+    <div id="paletteSwatches" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
+    <p id="paletteTip" style="font-size:0.8rem;color:var(--muted);display:none;">Click a swatch to set it as the current piece fabric color.</p>
+    <div class="actions">
+      <button class="btn btn-outline" onclick="closePaletteModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Stash Import Modal -->
+<div class="modal-overlay" id="stashImportModal">
+  <div class="modal">
+    <h3>📦 Import Fabric Stash</h3>
+    <textarea id="stashImportData" placeholder='Paste exported stash JSON here...'></textarea>
+    <div id="stashImportError" style="color:#c0392b;font-size:0.85rem;margin-top:8px;"></div>
+    <div class="actions">
+      <button class="btn btn-green" onclick="doStashImport()">Import</button>
+      <button class="btn btn-outline" onclick="document.getElementById('stashImportModal').classList.remove('active')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ──
 let blockPieces = [];
+let blockPiecesB = [];
 let editingIndex = -1;
 let fabricPrices = {}; // keyed by fabric name, $/yard
+let fabricStash = JSON.parse(localStorage.getItem('quiltPlannerStash') || '[]');
 
 const SIZE_PRESETS = [
   { label: 'Baby', w: 36, h: 52 },
@@ -404,7 +494,11 @@ function init() {
   syncPresetHighlight(50, 65);
 
   document.getElementById('pieceType').addEventListener('change', onPieceTypeChange);
+  document.getElementById('layoutStyle').addEventListener('change', function() {
+    document.getElementById('onpointBgFabric').style.display = this.value === 'onpoint' ? '' : 'none';
+  });
   onPieceTypeChange();
+  renderStashList();
 }
 
 function applyPreset(w, h, el) {
@@ -538,14 +632,22 @@ function addPiece() {
   const color = document.getElementById('pieceColor').value;
   const name = document.getElementById('pieceFabricName').value || 'Unnamed';
 
-  const piece = { type, finW, finH, qty, color, name };
+  const piece = { type, finW, finH, qty, color, name, block: 'A' };
+
+  if (document.getElementById('useAltBlock').checked) {
+    piece.block = document.getElementById('pieceBlockTarget').value;
+  }
 
   if (type === 'hst' || type === 'qst') {
     piece.color2 = document.getElementById('pieceColor2').value;
     piece.name2 = document.getElementById('pieceFabricName2').value || 'Unnamed B';
   }
 
-  blockPieces.push(piece);
+  if (piece.block === 'B') {
+    blockPiecesB.push(piece);
+  } else {
+    blockPieces.push(piece);
+  }
   renderPiecesList();
 }
 
@@ -556,6 +658,7 @@ function removePiece(i) {
 
 function clearPieces() {
   blockPieces = [];
+  blockPiecesB = [];
   renderPiecesList();
 }
 
@@ -598,7 +701,8 @@ function editPiece(i) {
 function saveEdit() {
   if (editingIndex < 0) return;
   const type = document.getElementById('editType').value;
-  const p = blockPieces[editingIndex];
+  const isBlockB = document.getElementById('editModal').dataset.editBlock === 'B';
+  const p = isBlockB ? blockPiecesB[editingIndex] : blockPieces[editingIndex];
   p.type = type;
   p.finW = parseFloat(document.getElementById('editFinW').value);
   p.finH = (type === 'rect' || type === 'flygeese' || type === 'strip') ? parseFloat(document.getElementById('editFinH').value) : p.finW;
@@ -619,15 +723,20 @@ function saveEdit() {
 function closeEditModal() {
   editingIndex = -1;
   document.getElementById('editModal').classList.remove('active');
+  document.getElementById('editModal').dataset.editBlock = '';
 }
 
 function renderPiecesList() {
   const list = document.getElementById('piecesList');
-  if (blockPieces.length === 0) {
+  const useAlt = document.getElementById('useAltBlock').checked;
+  const allEmpty = blockPieces.length === 0 && blockPiecesB.length === 0;
+  if (allEmpty) {
     list.innerHTML = '<p style="color:var(--muted);font-size:0.85rem;">No pieces yet — add pieces above or load an example.</p>';
     return;
   }
-  list.innerHTML = blockPieces.map((p, i) => {
+  let html = '';
+  if (useAlt && blockPieces.length > 0) html += '<p style="font-size:0.8rem;font-weight:600;color:var(--teal);margin-bottom:4px;">Block A</p>';
+  html += blockPieces.map((p, i) => {
     const typeLabel = { square: 'Square', rect: 'Rect', hst: 'HST', qst: 'QST', flygeese: 'Flying Geese', strip: 'Strip', circle: 'Circle' }[p.type];
     const dims = (p.type === 'square' || p.type === 'circle') ? `${fmtDim(p.finW)}″` : `${fmtDim(p.finW)}×${fmtDim(p.finH)}″`;
     const hstExtra = (p.type === 'hst' || p.type === 'qst') ? ` <span class="swatch" style="background:${p.color2};display:inline-block;vertical-align:middle;"></span> ${esc(p.name2)}` : '';
@@ -639,9 +748,192 @@ function renderPiecesList() {
       <button class="btn btn-sm btn-danger" onclick="removePiece(${i})" title="Remove">✕</button>
     </div>`;
   }).join('');
+  if (useAlt) {
+    html += '<p style="font-size:0.8rem;font-weight:600;color:var(--accent);margin-top:8px;margin-bottom:4px;">Block B</p>';
+    if (blockPiecesB.length === 0) {
+      html += '<p style="color:var(--muted);font-size:0.82rem;">No Block B pieces yet.</p>';
+    } else {
+      html += blockPiecesB.map((p, i) => {
+        const typeLabel = { square: 'Square', rect: 'Rect', hst: 'HST', qst: 'QST', flygeese: 'Flying Geese', strip: 'Strip', circle: 'Circle' }[p.type];
+        const dims = (p.type === 'square' || p.type === 'circle') ? `${fmtDim(p.finW)}″` : `${fmtDim(p.finW)}×${fmtDim(p.finH)}″`;
+        const hstExtra = (p.type === 'hst' || p.type === 'qst') ? ` <span class="swatch" style="background:${p.color2};display:inline-block;vertical-align:middle;"></span> ${esc(p.name2)}` : '';
+        return `<div class="piece-item" style="border-left:3px solid var(--accent);">
+          <div class="swatch" style="background:${p.color}"></div>
+          <div class="dims">${typeLabel} ${dims} ×${p.qty}</div>
+          <div class="piece-name">${esc(p.name)}${hstExtra}</div>
+          <button class="btn btn-sm btn-edit" onclick="editPieceB(${i})" title="Edit piece">✎</button>
+          <button class="btn btn-sm btn-danger" onclick="removePieceB(${i})" title="Remove">✕</button>
+        </div>`;
+      }).join('');
+    }
+  }
+  list.innerHTML = html;
 }
 
 function esc(s) { return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// ── Alternating Blocks ──
+function toggleAltBlock() {
+  const checked = document.getElementById('useAltBlock').checked;
+  document.getElementById('altBlockTarget').style.display = checked ? '' : 'none';
+  renderPiecesList();
+}
+function removePieceB(i) { blockPiecesB.splice(i, 1); renderPiecesList(); }
+function editPieceB(i) {
+  editingIndex = i;
+  const p = blockPiecesB[i];
+  document.getElementById('editType').value = p.type;
+  document.getElementById('editFinW').value = p.finW;
+  document.getElementById('editFinH').value = p.finH || p.finW;
+  document.getElementById('editQty').value = p.qty;
+  document.getElementById('editColor').value = p.color;
+  document.getElementById('editName').value = p.name;
+  document.getElementById('editColor2').value = p.color2 || '#9caf88';
+  document.getElementById('editName2').value = p.name2 || '';
+  onEditTypeChange();
+  document.getElementById('editModal').classList.add('active');
+  document.getElementById('editModal').dataset.editBlock = 'B';
+}
+
+// ── Palette Extractor ──
+function openPaletteExtractor() {
+  document.getElementById('paletteSwatches').innerHTML = '';
+  document.getElementById('palettePreview').innerHTML = '';
+  document.getElementById('paletteTip').style.display = 'none';
+  document.getElementById('paletteFileInput').value = '';
+  document.getElementById('paletteModal').classList.add('active');
+}
+function closePaletteModal() { document.getElementById('paletteModal').classList.remove('active'); }
+
+function extractPalette(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.getElementById('paletteHiddenCanvas');
+      const maxDim = 200;
+      const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      // Show preview
+      const previewEl = document.getElementById('palettePreview');
+      previewEl.innerHTML = `<img src="${canvas.toDataURL()}" style="max-width:180px;border-radius:6px;border:1px solid var(--border);">`;
+
+      // Sample pixels
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const pixels = [];
+      const step = Math.max(1, Math.floor((canvas.width * canvas.height) / 1000));
+      for (let i = 0; i < imageData.length; i += step * 4) {
+        pixels.push([imageData[i], imageData[i+1], imageData[i+2]]);
+      }
+
+      // Group similar colors (within RGB distance of 30)
+      const groups = [];
+      pixels.forEach(px => {
+        let found = false;
+        for (const g of groups) {
+          const d = Math.sqrt((px[0]-g.avg[0])**2 + (px[1]-g.avg[1])**2 + (px[2]-g.avg[2])**2);
+          if (d < 30) {
+            g.count++;
+            g.sum[0] += px[0]; g.sum[1] += px[1]; g.sum[2] += px[2];
+            g.avg = [Math.round(g.sum[0]/g.count), Math.round(g.sum[1]/g.count), Math.round(g.sum[2]/g.count)];
+            found = true;
+            break;
+          }
+        }
+        if (!found) groups.push({ avg: [...px], sum: [...px], count: 1 });
+      });
+
+      // Sort by frequency, take top 8
+      groups.sort((a, b) => b.count - a.count);
+      const topColors = groups.slice(0, 8).map(g => {
+        const hex = '#' + g.avg.map(v => v.toString(16).padStart(2, '0')).join('');
+        return hex;
+      });
+
+      // Display swatches
+      const swatchContainer = document.getElementById('paletteSwatches');
+      swatchContainer.innerHTML = topColors.map(c =>
+        `<div onclick="applyPaletteColor('${c}')" style="width:40px;height:40px;border-radius:6px;background:${c};cursor:pointer;border:2px solid rgba(0,0,0,0.15);transition:transform 0.15s;" onmouseover="this.style.transform='scale(1.15)'" onmouseout="this.style.transform='scale(1)'"></div>`
+      ).join('');
+      document.getElementById('paletteTip').style.display = '';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function applyPaletteColor(hex) {
+  document.getElementById('pieceColor').value = hex;
+  closePaletteModal();
+}
+
+// ── Fabric Stash ──
+function saveStash() { localStorage.setItem('quiltPlannerStash', JSON.stringify(fabricStash)); }
+
+function renderStashList() {
+  const list = document.getElementById('stashList');
+  if (!list) return;
+  if (fabricStash.length === 0) {
+    list.innerHTML = '<p style="color:var(--muted);font-size:0.82rem;">No fabrics in stash yet.</p>';
+    return;
+  }
+  list.innerHTML = fabricStash.map((s, i) =>
+    `<div class="piece-item">
+      <div class="swatch" style="background:${s.color}"></div>
+      <div class="dims">${esc(s.name)}</div>
+      <div class="piece-name">${s.yards} yd</div>
+      <button class="btn btn-sm btn-danger" onclick="removeStashEntry(${i})" title="Remove">✕</button>
+    </div>`
+  ).join('');
+}
+
+function addStashEntry() {
+  const name = document.getElementById('stashAddName').value.trim();
+  const color = document.getElementById('stashAddColor').value;
+  const yards = parseFloat(document.getElementById('stashAddYards').value) || 0;
+  if (!name) return alert('Enter a fabric name.');
+  fabricStash.push({ name, color, yards });
+  saveStash();
+  renderStashList();
+  document.getElementById('stashAddName').value = '';
+  document.getElementById('stashAddYards').value = '';
+}
+
+function removeStashEntry(i) { fabricStash.splice(i, 1); saveStash(); renderStashList(); }
+
+function exportStash() {
+  const json = JSON.stringify(fabricStash, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'quiltplanner-stash.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importStash() {
+  document.getElementById('stashImportData').value = '';
+  document.getElementById('stashImportError').textContent = '';
+  document.getElementById('stashImportModal').classList.add('active');
+}
+
+function doStashImport() {
+  try {
+    const data = JSON.parse(document.getElementById('stashImportData').value);
+    if (!Array.isArray(data)) throw new Error('Expected JSON array');
+    fabricStash = data;
+    saveStash();
+    renderStashList();
+    document.getElementById('stashImportModal').classList.remove('active');
+  } catch (e) {
+    document.getElementById('stashImportError').textContent = 'Error: ' + e.message;
+  }
+}
 
 // ── Cutting Math ──
 function cutSize(piece, seam) {
@@ -715,12 +1007,37 @@ function calculate() {
   const wastePct = (parseFloat(document.getElementById('wasteMargin').value) || 0) / 100;
   const prewash = document.getElementById('prewashAdj').checked;
   const showCost = document.getElementById('showCost').checked;
+  const layoutStyle = document.getElementById('layoutStyle').value;
+  const useAlt = document.getElementById('useAltBlock').checked;
 
   const innerW = quiltW - 2 * borderW;
   const innerH = quiltH - 2 * borderW;
-  const cols = Math.max(1, Math.floor((innerW + sashW) / (blockSz + sashW)));
-  const rows = Math.max(1, Math.floor((innerH + sashW) / (blockSz + sashW)));
-  const totalBlocks = rows * cols;
+  let cols, rows, totalBlocks;
+  let settingTriangles = 0, cornerTriangles = 0;
+
+  if (layoutStyle === 'onpoint') {
+    const diagSpan = blockSz * Math.SQRT2;
+    cols = Math.max(1, Math.floor((innerW + sashW) / (diagSpan / 2 + sashW)));
+    rows = Math.max(1, Math.floor((innerH + sashW) / (diagSpan / 2 + sashW)));
+    // Staggered grid: odd rows have cols blocks, even rows have cols-1
+    totalBlocks = 0;
+    for (let r = 0; r < rows; r++) {
+      totalBlocks += (r % 2 === 0) ? cols : Math.max(1, cols - 1);
+    }
+    settingTriangles = 2 * (cols + rows - 2);
+    cornerTriangles = 4;
+  } else {
+    cols = Math.max(1, Math.floor((innerW + sashW) / (blockSz + sashW)));
+    rows = Math.max(1, Math.floor((innerH + sashW) / (blockSz + sashW)));
+    totalBlocks = rows * cols;
+  }
+
+  // Block A / Block B counts for alternating layout
+  let blocksA = totalBlocks, blocksB = 0;
+  if (useAlt && blockPiecesB.length > 0) {
+    blocksA = Math.ceil(totalBlocks / 2);
+    blocksB = Math.floor(totalBlocks / 2);
+  }
 
   const fabrics = {};
   function getFabric(name, color) {
@@ -729,29 +1046,53 @@ function calculate() {
     return fabrics[key];
   }
 
-  // Block pieces
-  blockPieces.forEach(piece => {
-    const cs = cutSize(piece, seam);
-    const totalQty = piece.qty * totalBlocks;
+  // Helper to add block pieces to fabric requirements
+  function addBlockPieces(pieces, blockCount) {
+    pieces.forEach(piece => {
+      const cs = cutSize(piece, seam);
+      const totalQty = piece.qty * blockCount;
 
-    if (piece.type === 'hst') {
-      const squaresNeeded = Math.ceil(totalQty / 2);
-      getFabric(piece.name, piece.color).cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'hst' });
-      getFabric(piece.name2, piece.color2).cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'hst' });
-    } else if (piece.type === 'qst') {
-      const squaresNeeded = Math.ceil(totalQty / 4);
-      getFabric(piece.name, piece.color).cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'qst' });
-      getFabric(piece.name2, piece.color2).cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'qst' });
-    } else if (piece.type === 'flygeese') {
-      const lgNeeded = Math.ceil(totalQty / 4);
-      const smNeeded = totalQty * 2;
-      const fab = getFabric(piece.name, piece.color);
-      fab.cuts.push({ cutW: cs.w, cutH: cs.h, count: lgNeeded, note: `Lg sq: ${fmtDim(cs.w)}″ (╳ = 4 geese)`, pieceType: 'flygeese-lg' });
-      fab.cuts.push({ cutW: cs.smallW, cutH: cs.smallH, count: smNeeded, note: `Sm sq: ${fmtDim(cs.smallW)}″ (corners)`, pieceType: 'flygeese-sm' });
-    } else {
-      getFabric(piece.name, piece.color).cuts.push({ cutW: cs.w, cutH: cs.h, count: totalQty, note: cs.note, pieceType: piece.type });
+      if (piece.type === 'hst') {
+        const squaresNeeded = Math.ceil(totalQty / 2);
+        getFabric(piece.name, piece.color).cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'hst' });
+        getFabric(piece.name2, piece.color2).cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'hst' });
+      } else if (piece.type === 'qst') {
+        const squaresNeeded = Math.ceil(totalQty / 4);
+        getFabric(piece.name, piece.color).cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'qst' });
+        getFabric(piece.name2, piece.color2).cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'qst' });
+      } else if (piece.type === 'flygeese') {
+        const lgNeeded = Math.ceil(totalQty / 4);
+        const smNeeded = totalQty * 2;
+        const fab = getFabric(piece.name, piece.color);
+        fab.cuts.push({ cutW: cs.w, cutH: cs.h, count: lgNeeded, note: `Lg sq: ${fmtDim(cs.w)}″ (╳ = 4 geese)`, pieceType: 'flygeese-lg' });
+        fab.cuts.push({ cutW: cs.smallW, cutH: cs.smallH, count: smNeeded, note: `Sm sq: ${fmtDim(cs.smallW)}″ (corners)`, pieceType: 'flygeese-sm' });
+      } else {
+        getFabric(piece.name, piece.color).cuts.push({ cutW: cs.w, cutH: cs.h, count: totalQty, note: cs.note, pieceType: piece.type });
+      }
+    });
+  }
+
+  // Block A pieces
+  addBlockPieces(blockPieces, blocksA);
+  // Block B pieces (alternating)
+  if (useAlt && blockPiecesB.length > 0 && blocksB > 0) {
+    addBlockPieces(blockPiecesB, blocksB);
+  }
+
+  // On-point setting & corner triangles
+  if (layoutStyle === 'onpoint') {
+    const bgName = document.getElementById('onpointBgName').value || 'Background';
+    const bgColor = document.getElementById('onpointBgColor').value;
+    const fab = getFabric(bgName, bgColor);
+    if (settingTriangles > 0) {
+      const settingCut = blockSz * Math.SQRT2 + 1.25;
+      fab.cuts.push({ cutW: settingCut, cutH: settingCut, count: Math.ceil(settingTriangles / 4), note: `Setting △ — cut ${fmtDim(settingCut)}″ sq ╳ into quarters`, pieceType: 'setting-triangle' });
     }
-  });
+    if (cornerTriangles > 0) {
+      const cornerCut = (blockSz / Math.SQRT2) + 0.875;
+      fab.cuts.push({ cutW: cornerCut, cutH: cornerCut, count: Math.ceil(cornerTriangles / 2), note: `Corner △ — cut ${fmtDim(cornerCut)}″ sq ╲ in half`, pieceType: 'corner-triangle' });
+    }
+  }
 
   // Sashing
   if (sashW > 0) {
@@ -808,11 +1149,11 @@ function calculate() {
     backingYards = Math.ceil(((backH * panels) / 36) * 8) / 8;
   }
 
-  renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam, wastePct, wof, calcBacking, prewash, showCost);
+  renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam, wastePct, wof, calcBacking, prewash, showCost, layoutStyle, useAlt);
 }
 
 // ── Rendering ──
-function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam, wastePct, wof, calcBacking, prewash, showCost) {
+function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam, wastePct, wof, calcBacking, prewash, showCost, layoutStyle, useAlt) {
   const area = document.getElementById('resultArea');
   let html = '';
 
@@ -959,25 +1300,31 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   html += `</div>`;
   html += `<div class="panel" id="print-shopping-list"><h2>🛒 Shopping List</h2>`;
   const costColHdr = showCost ? '<th>$/yard</th><th>Cost</th>' : '';
-  html += `<table class="fabric-table"><thead><tr><th>Fabric</th><th>Buy</th>${costColHdr}</tr></thead><tbody>`;
+  html += `<table class="fabric-table"><thead><tr><th>Fabric</th><th>Buy</th><th>Have</th><th>Need</th>${costColHdr}</tr></thead><tbody>`;
   fabricList.forEach(f => {
     if (!(f.name in fabricPrices)) fabricPrices[f.name] = 12;
+    const stashEntry = fabricStash.find(s => s.name.toLowerCase() === f.name.toLowerCase());
+    const haveYards = stashEntry ? stashEntry.yards : 0;
+    const needYards = Math.max(0, f.totalYards - haveYards);
+    const statusIcon = haveYards >= f.totalYards ? '✅' : (haveYards > 0 ? '⚠️' : '');
+    const haveCell = `<td>${haveYards > 0 ? yardsToFraction(haveYards) + ' yd' : '—'}</td>`;
+    const needCell = `<td>${statusIcon} ${needYards > 0 ? yardsToFraction(needYards) + ' yd' : 'Covered'}</td>`;
     const priceCell = showCost ? `<td><input type="number" class="fabric-price-input" data-fabric="${esc(f.name)}" value="${fabricPrices[f.name]}" min="0" step="0.5" style="width:70px;padding:4px 6px;font-size:0.85rem;"></td><td class="fabric-cost" data-fabric="${esc(f.name)}">$${(fabricPrices[f.name] * f.totalYards).toFixed(2)}</td>` : '';
-    html += `<tr><td><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${f.color};vertical-align:middle;margin-right:6px;border:1px solid rgba(0,0,0,0.15);"></span>${esc(f.name)}</td><td><strong>${f.yardsDisplay} yd</strong></td>${priceCell}</tr>`;
+    html += `<tr><td><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${f.color};vertical-align:middle;margin-right:6px;border:1px solid rgba(0,0,0,0.15);"></span>${esc(f.name)}</td><td><strong>${f.yardsDisplay} yd</strong></td>${haveCell}${needCell}${priceCell}</tr>`;
   });
   if (backingYards !== null) {
     if (!('Backing' in fabricPrices)) fabricPrices['Backing'] = 12;
     const backPriceCell = showCost ? `<td><input type="number" class="fabric-price-input" data-fabric="Backing" value="${fabricPrices['Backing']}" min="0" step="0.5" style="width:70px;padding:4px 6px;font-size:0.85rem;"></td><td class="fabric-cost" data-fabric="Backing">$${(fabricPrices['Backing'] * backingYards).toFixed(2)}</td>` : '';
-    html += `<tr><td>Backing</td><td><strong>${yardsToFraction(backingYards)} yd</strong></td>${backPriceCell}</tr>`;
+    html += `<tr><td>Backing</td><td><strong>${yardsToFraction(backingYards)} yd</strong></td><td>—</td><td>—</td>${backPriceCell}</tr>`;
   }
   if (calcBacking) {
-    html += `<tr><td>Batting</td><td><strong>${quiltW + 8}″ × ${quiltH + 8}″</strong></td>${showCost ? '<td></td><td></td>' : ''}</tr>`;
+    html += `<tr><td>Batting</td><td><strong>${quiltW + 8}″ × ${quiltH + 8}″</strong></td><td></td><td></td>${showCost ? '<td></td><td></td>' : ''}</tr>`;
   }
   if (showCost) {
     let grandTotal = 0;
     fabricList.forEach(f => { grandTotal += (fabricPrices[f.name] || 12) * f.totalYards; });
     if (backingYards !== null) grandTotal += (fabricPrices['Backing'] || 12) * backingYards;
-    html += `<tr style="border-top:2px solid var(--border);font-weight:bold;"><td colspan="2">Estimated Total</td><td></td><td id="costGrandTotal">$${grandTotal.toFixed(2)}</td></tr>`;
+    html += `<tr style="border-top:2px solid var(--border);font-weight:bold;"><td colspan="4">Estimated Total</td><td></td><td id="costGrandTotal">$${grandTotal.toFixed(2)}</td></tr>`;
   }
   html += `</tbody></table></div>`;
 
@@ -1022,7 +1369,7 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   area.innerHTML = html;
 
   drawBlockPreviewLarge();
-  drawQuiltPreview(quiltW, quiltH, blockSz, rows, cols, sashW, borderW);
+  drawQuiltPreview(quiltW, quiltH, blockSz, rows, cols, sashW, borderW, layoutStyle, useAlt);
   drawCuttingLayouts(fabricList, wof);
 
   // Cost estimator event listeners
@@ -1061,10 +1408,11 @@ function drawBlockPreviewLarge() {
   drawBlockPreview(ctx, 0, 0, size, blockPieces);
 }
 
-function drawQuiltPreview(quiltW, quiltH, blockSz, rows, cols, sashW, borderW) {
+function drawQuiltPreview(quiltW, quiltH, blockSz, rows, cols, sashW, borderW, layoutStyle, useAlt) {
   const canvas = document.getElementById('quiltCanvas');
   if (!canvas) return;
-  const pad = 28; // space for dimension labels
+  const arrangement = document.getElementById('blockArrangement').value;
+  const pad = 28;
   const maxW = 600, maxH = 500;
   const scale = Math.min(maxW / quiltW, maxH / quiltH);
   const w = Math.round(quiltW * scale), h = Math.round(quiltH * scale);
@@ -1073,22 +1421,65 @@ function drawQuiltPreview(quiltW, quiltH, blockSz, rows, cols, sashW, borderW) {
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Offset quilt drawing to leave room for labels
   const ox = 0, oy = 0;
-
   const borderColor = document.getElementById('borderColor').value;
   ctx.fillStyle = borderW > 0 ? borderColor : '#e0ddd8';
   ctx.fillRect(ox, oy, w, h);
 
   const bdr = borderW * scale, sash = sashW * scale, blk = blockSz * scale;
-  if (sashW > 0) {
-    ctx.fillStyle = document.getElementById('sashColor').value;
-    ctx.fillRect(ox + bdr, oy + bdr, w - 2*bdr, h - 2*bdr);
-  }
 
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      drawBlockPreview(ctx, ox + bdr + c*(blk+sash), oy + bdr + r*(blk+sash), blk, blockPieces);
+  if (layoutStyle === 'onpoint') {
+    // On-point diagonal layout
+    const bgColor = document.getElementById('onpointBgColor').value;
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(ox + bdr, oy + bdr, w - 2*bdr, h - 2*bdr);
+
+    const diagSpan = blk * Math.SQRT2;
+    const halfDiag = diagSpan / 2;
+    const innerW = w - 2*bdr;
+    const innerH = h - 2*bdr;
+    const centerX = ox + bdr + innerW / 2;
+    const centerY = ox + bdr + innerH / 2;
+    const startX = centerX - (cols - 1) * halfDiag / 2;
+    const startY = centerY - (rows - 1) * halfDiag / 2;
+
+    let blockIdx = 0;
+    for (let r = 0; r < rows; r++) {
+      const colsInRow = (r % 2 === 0) ? cols : Math.max(1, cols - 1);
+      const rowOffset = (r % 2 === 0) ? 0 : halfDiag / 2;
+      for (let c = 0; c < colsInRow; c++) {
+        const bx = startX + rowOffset + c * halfDiag;
+        const by = startY + r * halfDiag;
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.rotate(Math.PI / 4);
+        const pieces = _getBlockPieces(r, c, blockIdx, useAlt);
+        _applyArrangementTransform(ctx, r, c, blk, arrangement);
+        drawBlockPreview(ctx, -blk/2, -blk/2, blk, pieces);
+        ctx.restore();
+        blockIdx++;
+      }
+    }
+  } else {
+    // Straight set
+    if (sashW > 0) {
+      ctx.fillStyle = document.getElementById('sashColor').value;
+      ctx.fillRect(ox + bdr, oy + bdr, w - 2*bdr, h - 2*bdr);
+    }
+
+    let blockIdx = 0;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const bx = ox + bdr + c*(blk+sash);
+        const by = oy + bdr + r*(blk+sash);
+        const pieces = _getBlockPieces(r, c, blockIdx, useAlt);
+        ctx.save();
+        ctx.translate(bx + blk/2, by + blk/2);
+        _applyArrangementTransform(ctx, r, c, blk, arrangement);
+        drawBlockPreview(ctx, -blk/2, -blk/2, blk, pieces);
+        ctx.restore();
+        blockIdx++;
+      }
     }
   }
 
@@ -1103,26 +1494,54 @@ function drawQuiltPreview(quiltW, quiltH, blockSz, rows, cols, sashW, borderW) {
   ctx.font = '11px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  // Width label (bottom)
   ctx.fillText(`${quiltW}″`, ox + w/2, oy + h + 6);
-  // Arrows for width
   const ay = oy + h + 4;
   ctx.strokeStyle = '#5a554e'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(ox + 2, ay); ctx.lineTo(ox + w - 2, ay); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(ox + 2, ay - 3); ctx.lineTo(ox + 2, ay + 3); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(ox + w - 2, ay - 3); ctx.lineTo(ox + w - 2, ay + 3); ctx.stroke();
-  // Height label (right side)
   ctx.save();
   ctx.translate(ox + w + 14, oy + h/2);
   ctx.rotate(-Math.PI/2);
   ctx.textBaseline = 'middle';
   ctx.fillText(`${quiltH}″`, 0, 0);
   ctx.restore();
-  // Arrows for height
   const ax = ox + w + 4;
   ctx.beginPath(); ctx.moveTo(ax, oy + 2); ctx.lineTo(ax, oy + h - 2); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(ax - 3, oy + 2); ctx.lineTo(ax + 3, oy + 2); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(ax - 3, oy + h - 2); ctx.lineTo(ax + 3, oy + h - 2); ctx.stroke();
+}
+
+// Returns Block A or Block B pieces based on checkerboard position
+function _getBlockPieces(r, c, blockIdx, useAlt) {
+  if (useAlt && blockPiecesB.length > 0 && (r + c) % 2 === 1) {
+    return blockPiecesB;
+  }
+  return blockPieces;
+}
+
+// Applies rotation/mirroring transform based on arrangement setting
+function _applyArrangementTransform(ctx, r, c, blk, arrangement) {
+  switch (arrangement) {
+    case 'rotate90':
+      if ((r + c) % 2 === 1) ctx.rotate(Math.PI / 2);
+      break;
+    case 'rotate180':
+      if ((r + c) % 2 === 1) ctx.rotate(Math.PI);
+      break;
+    case 'pinwheel': {
+      const qr = r % 2, qc = c % 2;
+      const angle = [0, Math.PI/2, Math.PI*1.5, Math.PI][(qr * 2 + qc)];
+      ctx.rotate(angle);
+      break;
+    }
+    case 'mirror-h':
+      if (c % 2 === 1) ctx.scale(-1, 1);
+      break;
+    case 'mirror-v':
+      if (r % 2 === 1) ctx.scale(1, -1);
+      break;
+  }
 }
 
 function drawCuttingLayouts(fabricList, wof) {
