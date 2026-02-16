@@ -201,15 +201,18 @@ footer a { color: var(--teal); }
   <h2>🧩 Block Designer</h2>
   <p style="font-size:0.82rem;color:var(--muted);margin-bottom:12px;">Define the pieces in one block. The block repeats across the quilt grid.</p>
   <label>Piece Type</label>
-  <select id="pieceType">
-    <option value="square">Square</option>
-    <option value="rect">Rectangle</option>
-    <option value="hst">Half-Square Triangle (HST)</option>
-    <option value="qst">Quarter-Square Triangle (QST)</option>
-    <option value="flygeese">Flying Geese</option>
-    <option value="strip">Strip Set</option>
-    <option value="circle">Appliqué Circle</option>
-  </select>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <select id="pieceType" style="flex:1;">
+      <option value="square">Square</option>
+      <option value="rect">Rectangle</option>
+      <option value="hst">Half-Square Triangle (HST)</option>
+      <option value="qst">Quarter-Square Triangle (QST)</option>
+      <option value="flygeese">Flying Geese</option>
+      <option value="strip">Strip Set</option>
+      <option value="circle">Appliqué Circle</option>
+    </select>
+    <canvas id="pieceTypePreview" width="56" height="56" style="border:1px solid var(--border);border-radius:6px;background:#fff;flex-shrink:0;"></canvas>
+  </div>
   <div id="pieceDimFields">
     <div class="row">
       <div><label>Finished Size (in)</label><input type="number" id="pieceFinW" value="3" min="0.5" step="0.25"></div>
@@ -394,6 +397,77 @@ function onPieceTypeChange() {
   if (type === 'strip') {
     document.getElementById('pieceFinH').value = 2.5;
   }
+  drawPieceTypePreview(type);
+}
+
+function drawPieceTypePreview(type) {
+  const canvas = document.getElementById('pieceTypePreview');
+  if (!canvas) return;
+  const sz = 56;
+  canvas.width = sz; canvas.height = sz;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, sz, sz);
+  const m = 6, w = sz - 2*m, h = sz - 2*m;
+  const c1 = '#5b8a8a', c2 = '#c87941', bg = '#f0ede8';
+
+  switch (type) {
+    case 'square':
+      ctx.fillStyle = c1;
+      ctx.fillRect(m, m, w, h);
+      break;
+    case 'rect':
+      ctx.fillStyle = c1;
+      ctx.fillRect(m, m + h*0.15, w, h*0.7);
+      break;
+    case 'hst':
+      ctx.fillStyle = c1;
+      ctx.beginPath(); ctx.moveTo(m, m); ctx.lineTo(m+w, m); ctx.lineTo(m, m+h); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = c2;
+      ctx.beginPath(); ctx.moveTo(m+w, m); ctx.lineTo(m+w, m+h); ctx.lineTo(m, m+h); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(m, m+h); ctx.lineTo(m+w, m); ctx.stroke();
+      break;
+    case 'qst': {
+      const cx = m+w/2, cy = m+h/2;
+      ctx.fillStyle = c1;
+      ctx.beginPath(); ctx.moveTo(m, m); ctx.lineTo(cx, cy); ctx.lineTo(m, m+h); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(m+w, m); ctx.lineTo(cx, cy); ctx.lineTo(m+w, m+h); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = c2;
+      ctx.beginPath(); ctx.moveTo(m, m); ctx.lineTo(m+w, m); ctx.lineTo(cx, cy); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(m, m+h); ctx.lineTo(m+w, m+h); ctx.lineTo(cx, cy); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(m, m); ctx.lineTo(m+w, m+h); ctx.moveTo(m+w, m); ctx.lineTo(m, m+h); ctx.stroke();
+      break;
+    }
+    case 'flygeese':
+      ctx.fillStyle = c1;
+      ctx.beginPath(); ctx.moveTo(m+w/2, m); ctx.lineTo(m+w, m+h); ctx.lineTo(m, m+h); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = bg;
+      ctx.beginPath(); ctx.moveTo(m, m); ctx.lineTo(m+w/2, m); ctx.lineTo(m, m+h); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(m+w/2, m); ctx.lineTo(m+w, m); ctx.lineTo(m+w, m+h); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(m, m+h); ctx.lineTo(m+w/2, m); ctx.lineTo(m+w, m+h); ctx.stroke();
+      break;
+    case 'strip':
+      for (let i = 0; i < 4; i++) {
+        ctx.fillStyle = [c1, c2, '#9caf88', bg][i];
+        ctx.fillRect(m, m + i*h/4, w, h/4 - 1);
+      }
+      break;
+    case 'circle':
+      ctx.fillStyle = bg;
+      ctx.fillRect(m, m, w, h);
+      ctx.fillStyle = c1;
+      ctx.beginPath(); ctx.arc(m+w/2, m+h/2, w*0.4, 0, Math.PI*2); ctx.fill();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = '#999'; ctx.lineWidth = 1;
+      ctx.strokeRect(m, m, w, h);
+      ctx.setLineDash([]);
+      break;
+  }
+  // Outer border
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 1;
+  ctx.strokeRect(m, m, w, h);
 }
 
 function onEditTypeChange() {
