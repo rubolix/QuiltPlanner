@@ -231,6 +231,7 @@ footer a { color: var(--teal); }
   <div class="actions">
     <button class="btn btn-accent" onclick="addPiece()">+ Add Piece</button>
     <button class="btn btn-outline" onclick="clearPieces()">Clear All</button>
+    <button class="btn btn-outline" onclick="randomizeColors()" title="Shuffle fabric colors across existing pieces">🎲 Randomize Colors</button>
   </div>
   <div id="piecesList" style="margin-top:12px;"></div>
   <p class="tip" id="pieceTip">💡 HSTs are cut from squares ⅞″ larger than finished size, yielding 2 triangles per square.</p>
@@ -426,6 +427,27 @@ function removePiece(i) {
 function clearPieces() {
   blockPieces = [];
   renderPiecesList();
+}
+
+function randomizeColors() {
+  if (blockPieces.length < 2) return;
+  const colors = [];
+  blockPieces.forEach(p => {
+    colors.push({ color: p.color, name: p.name });
+    if (p.color2) colors.push({ color: p.color2, name: p.name2 });
+  });
+  // Fisher-Yates shuffle
+  for (let i = colors.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [colors[i], colors[j]] = [colors[j], colors[i]];
+  }
+  let ci = 0;
+  blockPieces.forEach(p => {
+    p.color = colors[ci].color; p.name = colors[ci].name; ci++;
+    if (p.color2 !== undefined) { p.color2 = colors[ci].color; p.name2 = colors[ci].name; ci++; }
+  });
+  renderPiecesList();
+  calculate();
 }
 
 function editPiece(i) {
