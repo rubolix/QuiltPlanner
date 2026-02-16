@@ -110,9 +110,9 @@ footer { text-align: center; padding: 20px; color: var(--muted); font-size: 0.8r
 footer a { color: var(--teal); }
 
 @media print {
-  body { background: #fff !important; color: #000 !important; }
-  .no-print { display: none !important; }
-  .panel { background: #fff !important; border: 1px solid #ccc !important; break-inside: avoid; box-shadow: none !important; }
+  body { background: #fff !important; color: #000 !important; font-size: 11pt; }
+  .no-print, #importModal, .modal { display: none !important; }
+  .panel { background: #fff !important; border: 1px solid #ccc !important; break-inside: avoid; box-shadow: none !important; margin-bottom: 12px; }
   .stat { background: #f5f5f5 !important; box-shadow: none !important; }
   .stat .val { color: #333 !important; }
   .stat .lbl { color: #666 !important; }
@@ -120,6 +120,8 @@ footer a { color: var(--teal); }
   .fabric-table td { border-bottom-color: #eee !important; color: #000 !important; }
   canvas { max-width: 100% !important; }
   .grid { display: block !important; }
+  h1 { font-size: 18pt; margin-bottom: 4px; }
+  @page { margin: 0.5in; }
 }
 </style>
 </head>
@@ -261,6 +263,7 @@ footer a { color: var(--teal); }
   </div>
   <div class="import-export-group">
     <button class="btn btn-outline" onclick="exportJSON()">📋 Export JSON</button>
+    <button class="btn btn-outline" onclick="exportPDF()">📄 Print / PDF</button>
     <button class="btn btn-outline" onclick="showImportModal()">📥 Import JSON</button>
     <button class="btn btn-outline" onclick="window.print()">🖨 Print</button>
   </div>
@@ -1047,6 +1050,11 @@ function exportJSON() {
   const a = document.createElement('a');
   a.href = url; a.download = 'quiltplanner-project.json'; a.click();
   URL.revokeObjectURL(url);
+}
+
+function exportPDF() {
+  calculate();
+  window.print();
 }
 
 function showImportModal() {
