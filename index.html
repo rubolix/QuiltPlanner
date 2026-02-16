@@ -267,10 +267,9 @@ footer a { color: var(--teal); }
   <div class="import-export-group">
     <button class="btn btn-outline" onclick="exportJSON()">📋 Export JSON</button>
     <button class="btn btn-outline" onclick="exportCSV()">📋 Export CSV</button>
-    <button class="btn btn-outline" onclick="exportPDF()">📄 Print / PDF</button>
     <button class="btn btn-outline" onclick="showImportModal()">📥 Import JSON</button>
     <button class="btn btn-outline" onclick="showCSVImportModal()">📥 Import CSV</button>
-    <button class="btn btn-outline" onclick="window.print()">🖨 Print</button>
+    <button class="btn btn-outline" onclick="exportPDF()">🖨️ Print / PDF</button>
   </div>
 </div>
 </div>
@@ -994,20 +993,26 @@ function drawCuttingLayouts(fabricList, wof) {
     const canvas = document.getElementById(`cutCanvas_${fi}`);
     if (!canvas) return;
 
-    // Build list of all strips with their pieces
-    const strips = [];
+    // Build consolidated strip types (group identical strips)
+    const stripTypes = [];
     fab.stripDetails.forEach(d => {
-      for (let s = 0; s < d.strips; s++) {
-        const piecesInStrip = (s < d.strips - 1) ? d.acrossWOF : (d.count - d.acrossWOF * (d.strips - 1));
-        strips.push({ stripHeight: d.stripHeight, cutW: d.cutW, cutH: d.cutH, count: Math.max(1, piecesInStrip), note: d.note, color: fab.color });
+      const piecesInFullStrip = d.acrossWOF;
+      const remainder = d.count % d.acrossWOF;
+      const fullStrips = d.strips - (remainder > 0 ? 1 : 0);
+
+      if (fullStrips > 0) {
+        stripTypes.push({ stripHeight: d.stripHeight, cutW: d.cutW, cutH: d.cutH, count: piecesInFullStrip, note: d.note, color: fab.color, repeat: fullStrips });
+      }
+      if (remainder > 0) {
+        stripTypes.push({ stripHeight: d.stripHeight, cutW: d.cutW, cutH: d.cutH, count: remainder, note: d.note, color: fab.color, repeat: 1 });
       }
     });
 
-    if (strips.length === 0) { canvas.width = 0; canvas.height = 0; return; }
+    if (stripTypes.length === 0) { canvas.width = 0; canvas.height = 0; return; }
 
     const scale = Math.min(maxCanvasW / wof, 12);
     const canvasW = Math.round(wof * scale);
-    const totalH = strips.reduce((s, st) => s + Math.round(st.stripHeight * scale) + stripGap + labelH, 0) + 10;
+    const totalH = stripTypes.reduce((s, st) => s + Math.round(st.stripHeight * scale) + stripGap + labelH, 0) + 10;
 
     canvas.width = canvasW + 40;
     canvas.height = totalH;
@@ -1015,16 +1020,17 @@ function drawCuttingLayouts(fabricList, wof) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     let curY = 5;
-    strips.forEach((strip, si) => {
+    stripTypes.forEach((strip) => {
       const sh = Math.round(strip.stripHeight * scale);
       const sw = canvasW;
 
-      // Strip label
+      // Strip label with repeat count
       ctx.fillStyle = '#5a554e';
       ctx.font = '10px system-ui, sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText(`Strip ${si + 1}: ${fmtDim(strip.stripHeight)}″ tall`, 2, curY);
+      const repeatLabel = strip.repeat > 1 ? ` — repeat ×${strip.repeat}` : '';
+      ctx.fillText(`${fmtDim(strip.stripHeight)}″ strip, ${strip.count} pcs of ${fmtDim(strip.cutW)}×${fmtDim(strip.cutH)}″${repeatLabel}`, 2, curY);
       curY += labelH;
 
       // Waste background
@@ -1041,7 +1047,6 @@ function drawCuttingLayouts(fabricList, wof) {
         if (px + pw > sw) break;
         ctx.fillStyle = strip.color;
         ctx.fillRect(px + 1, curY + 1, pw - 2, sh - 2);
-        // Piece dimension label
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 9px system-ui, sans-serif';
         ctx.textAlign = 'center';
@@ -1050,6 +1055,22 @@ function drawCuttingLayouts(fabricList, wof) {
           ctx.fillText(`${fmtDim(strip.cutW)}×${fmtDim(strip.cutH)}`, px + pw / 2, curY + sh / 2);
         }
         px += pw;
+      }
+
+      // Repeat badge
+      if (strip.repeat > 1) {
+        const badge = `×${strip.repeat}`;
+        ctx.font = 'bold 11px system-ui, sans-serif';
+        const bw = ctx.measureText(badge).width + 10;
+        const bx = sw - bw - 4, by = curY + 3;
+        ctx.fillStyle = 'rgba(200,121,65,0.9)';
+        ctx.beginPath();
+        ctx.roundRect(bx, by, bw, 18, 4);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(badge, bx + bw / 2, by + 9);
       }
 
       // WOF label on right
