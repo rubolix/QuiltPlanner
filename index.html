@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuiltPlanner — Fabric Calculator & Layout Planner</title>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --border: #2a2a4a;
+  --accent: #e07a5f;
+  --accent2: #81b29a;
+  --text: #e8e8e8;
+  --muted: #888;
+  --radius: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+h1 { font-size: 1.8rem; padding: 24px; text-align: center; }
+h1 span { color: var(--accent); }
+
+.app { max-width: 1400px; margin: 0 auto; padding: 0 20px 40px; }
+
+.grid { display: grid; grid-template-columns: 380px 1fr; gap: 24px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+.panel h2 { font-size: 1rem; margin-bottom: 16px; color: var(--accent2); }
+
+label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; margin-top: 12px; }
+label:first-child { margin-top: 0; }
+input, select { width: 100%; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 0.95rem; }
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+
+.btn { padding: 10px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; font-weight: 600; transition: opacity 0.15s; }
+.btn:hover { opacity: 0.85; }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-green { background: var(--accent2); color: #1a1a2e; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-sm { padding: 6px 10px; font-size: 0.8rem; }
+.btn-danger { background: #e74c3c; color: #fff; }
+
+.actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+
+.presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.preset { padding: 4px 10px; font-size: 0.8rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer; }
+.preset:hover, .preset.active { border-color: var(--accent); color: var(--accent); }
+
+.stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.stat { background: var(--bg); border-radius: 4px; padding: 10px 14px; text-align: center; flex: 1; min-width: 100px; }
+.stat .val { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
+.stat .lbl { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+.piece-item { display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--bg); border-radius: 4px; margin-bottom: 6px; font-size: 0.9rem; }
+.piece-item .swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.2); }
+.piece-item .dims { flex: 1; }
+
+.fabric-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.85rem; }
+.fabric-table th { text-align: left; padding: 8px; border-bottom: 2px solid var(--border); color: var(--accent2); font-weight: 600; }
+.fabric-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.fabric-table tr:hover td { background: rgba(255,255,255,0.03); }
+
+.canvas-wrap { background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border); padding: 12px; overflow: auto; }
+canvas { display: block; margin: 0 auto; }
+
+.import-export-group { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.import-export-group .btn { font-size: 0.78rem; padding: 6px 10px; }
+
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; max-width: 560px; width: 90%; max-height: 80vh; overflow-y: auto; }
+.modal h3 { color: var(--accent2); margin-bottom: 12px; }
+.modal textarea { width: 100%; min-height: 140px; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: monospace; font-size: 0.85rem; resize: vertical; }
+.modal .actions { margin-top: 16px; }
+
+.empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+.empty-state p { margin-top: 8px; font-size: 0.9rem; }
+
+.color-input-wrap { display: flex; gap: 8px; align-items: center; }
+.color-input-wrap input[type="color"] { width: 36px; height: 36px; padding: 2px; cursor: pointer; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); }
+.color-input-wrap input[type="text"] { flex: 1; }
+
+.section-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+footer { text-align: center; padding: 20px; color: var(--muted); font-size: 0.8rem; }
+footer a { color: var(--accent2); }
+
+@media print {
+  body { background: #fff !important; color: #000 !important; }
+  .no-print { display: none !important; }
+  .panel { background: #fff !important; border: 1px solid #ccc !important; break-inside: avoid; }
+  .stat { background: #f5f5f5 !important; }
+  .stat .val { color: #333 !important; }
+  .stat .lbl { color: #666 !important; }
+  .fabric-table th { color: #333 !important; border-bottom-color: #ccc !important; }
+  .fabric-table td { border-bottom-color: #eee !important; color: #000 !important; }
+  canvas { max-width: 100% !important; }
+  .grid { display: block !important; }
+}
+</style>
+</head>
+<body>
+<h1>🧵 Quilt<span>Planner</span></h1>
+<div class="app">
+<div class="grid">
+
+<!-- LEFT PANEL -->
+<div>
+
+<!-- Quilt Settings -->
+<div class="panel no-print">
+  <h2>📐 Quilt Settings</h2>
+  <label>Quilt Size Preset</label>
+  <div class="presets" id="sizePresets"></div>
+  <div class="row">
+    <div><label>Width (in)</label><input type="number" id="quiltW" value="50" min="1"></div>
+    <div><label>Height (in)</label><input type="number" id="quiltH" value="65" min="1"></div>
+  </div>
+  <div class="row">
+    <div><label>Block Size (in)</label><input type="number" id="blockSize" value="12" min="1" max="36" step="0.5"></div>
+    <div><label>Seam Allowance (in)</label><input type="number" id="seamAllowance" value="0.25" min="0" max="1" step="0.125"></div>
+  </div>
+  <div class="row">
+    <div><label>WOF (in)</label><input type="number" id="wof" value="42" min="1"></div>
+    <div><label>Units</label>
+      <select id="units"><option value="in">Inches</option><option value="cm">Centimeters</option></select>
+    </div>
+  </div>
+  <hr class="section-divider">
+  <h2>🔲 Sashing & Borders</h2>
+  <div class="row">
+    <div>
+      <label>Sashing Width</label>
+      <input type="number" id="sashW" value="0" min="0" max="6" step="0.25">
+    </div>
+    <div>
+      <label>Sashing Fabric</label>
+      <div class="color-input-wrap">
+        <input type="color" id="sashColor" value="#f5f5dc">
+        <input type="text" id="sashFabricName" value="Sashing" placeholder="Name">
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label>Border Width</label>
+      <input type="number" id="borderW" value="0" min="0" max="12" step="0.25">
+    </div>
+    <div>
+      <label>Border Fabric</label>
+      <div class="color-input-wrap">
+        <input type="color" id="borderColor" value="#2f4f4f">
+        <input type="text" id="borderFabricName" value="Border" placeholder="Name">
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label>Binding Width</label>
+      <input type="number" id="bindingW" value="2.5" min="0" max="4" step="0.25">
+    </div>
+    <div>
+      <label>Binding Fabric</label>
+      <div class="color-input-wrap">
+        <input type="color" id="bindingColor" value="#333333">
+        <input type="text" id="bindingFabricName" value="Binding" placeholder="Name">
+      </div>
+    </div>
+  </div>
+  <label><input type="checkbox" id="calcBacking" checked> Include backing calculation</label>
+</div>
+
+<!-- Block Designer -->
+<div class="panel no-print">
+  <h2>🧩 Block Designer</h2>
+  <p style="font-size:0.8rem;color:var(--muted);margin-bottom:12px;">Define the pieces in one block. The block repeats across the quilt.</p>
+  <label>Piece Type</label>
+  <select id="pieceType">
+    <option value="square">Square</option>
+    <option value="rect">Rectangle</option>
+    <option value="hst">Half-Square Triangle (HST)</option>
+    <option value="flygeese">Flying Geese</option>
+  </select>
+  <div id="pieceDimFields">
+    <div class="row">
+      <div><label>Finished Size (in)</label><input type="number" id="pieceFinW" value="3" min="0.5" step="0.25"></div>
+      <div id="pieceFinHWrap" style="display:none;"><label>Height (in)</label><input type="number" id="pieceFinH" value="3" min="0.5" step="0.25"></div>
+    </div>
+  </div>
+  <label>Quantity per Block</label>
+  <input type="number" id="pieceQty" value="1" min="1" max="100">
+  <label>Fabric</label>
+  <div class="color-input-wrap">
+    <input type="color" id="pieceColor" value="#e07a5f">
+    <input type="text" id="pieceFabricName" value="Fabric A" placeholder="Fabric name">
+  </div>
+  <div id="hstFabric2" style="display:none;">
+    <label>HST Second Fabric</label>
+    <div class="color-input-wrap">
+      <input type="color" id="pieceColor2" value="#81b29a">
+      <input type="text" id="pieceFabricName2" value="Fabric B" placeholder="Second fabric name">
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-accent" onclick="addPiece()">+ Add Piece</button>
+    <button class="btn btn-outline" onclick="clearPieces()">Clear All</button>
+  </div>
+  <div id="piecesList" style="margin-top:12px;"></div>
+</div>
+
+<!-- Actions -->
+<div class="panel no-print">
+  <div class="actions" style="margin-top:0;">
+    <button class="btn btn-green" onclick="calculate()" style="flex:1;">⚡ Calculate Yardage</button>
+  </div>
+  <div class="actions">
+    <button class="btn btn-outline btn-sm" onclick="loadExample('ninepatch')">Nine Patch</button>
+    <button class="btn btn-outline btn-sm" onclick="loadExample('pinwheel')">Pinwheel</button>
+    <button class="btn btn-outline btn-sm" onclick="loadExample('star')">Sawtooth Star</button>
+    <button class="btn btn-outline btn-sm" onclick="loadExample('railfence')">Rail Fence</button>
+  </div>
+  <div class="import-export-group">
+    <button class="btn btn-outline" onclick="exportJSON()">📋 Export JSON</button>
+    <button class="btn btn-outline" onclick="showImportModal()">📥 Import JSON</button>
+    <button class="btn btn-outline" onclick="window.print()">🖨 Print</button>
+  </div>
+</div>
+</div>
+
+<!-- RIGHT PANEL -->
+<div>
+<div id="resultArea">
+  <div class="panel">
+    <div class="empty-state">
+      <h2>🧵</h2>
+      <p>Add pieces to your block, then click <strong>⚡ Calculate Yardage</strong></p>
+    </div>
+  </div>
+</div>
+</div>
+
+</div><!-- /grid -->
+</div><!-- /app -->
+
+<footer class="no-print">QuiltPlanner — <a href="https://github.com/rubolix/QuiltPlanner">GitHub</a></footer>
+
+<!-- Import Modal -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal">
+    <h3>📥 Import Project (JSON)</h3>
+    <textarea id="importData" placeholder='Paste JSON here...'></textarea>
+    <div id="importError" style="color:#e74c3c;font-size:0.85rem;margin-top:8px;"></div>
+    <div class="actions">
+      <button class="btn btn-green" onclick="doImport()">Import</button>
+      <button class="btn btn-outline" onclick="closeImportModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──
+let blockPieces = [];
+const FABRIC_COLORS = ['#e07a5f','#81b29a','#f2cc8f','#6a9fb5','#c9ada7','#a8dadc','#e9c46a','#f4a261','#264653','#2a9d8f'];
+let colorIdx = 0;
+
+const SIZE_PRESETS = [
+  { label: 'Baby', w: 36, h: 52 },
+  { label: 'Throw', w: 50, h: 65 },
+  { label: 'Twin', w: 68, h: 90 },
+  { label: 'Full', w: 80, h: 90 },
+  { label: 'Queen', w: 88, h: 96 },
+  { label: 'King', w: 105, h: 96 },
+];
+
+// ── Init ──
+function init() {
+  const presetContainer = document.getElementById('sizePresets');
+  presetContainer.innerHTML = SIZE_PRESETS.map(p =>
+    `<button class="preset" onclick="applyPreset(${p.w},${p.h})">${p.label} (${p.w}×${p.h})</button>`
+  ).join('') + `<button class="preset" onclick="applyPreset(0,0)">Custom</button>`;
+
+  document.getElementById('pieceType').addEventListener('change', onPieceTypeChange);
+  onPieceTypeChange();
+}
+
+function applyPreset(w, h) {
+  if (w > 0) {
+    document.getElementById('quiltW').value = w;
+    document.getElementById('quiltH').value = h;
+  }
+  document.querySelectorAll('.preset').forEach(el => el.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+function onPieceTypeChange() {
+  const type = document.getElementById('pieceType').value;
+  const hWrap = document.getElementById('pieceFinHWrap');
+  const hst2 = document.getElementById('hstFabric2');
+  hWrap.style.display = (type === 'rect' || type === 'flygeese') ? '' : 'none';
+  hst2.style.display = (type === 'hst') ? '' : 'none';
+  if (type === 'flygeese') {
+    document.getElementById('pieceFinH').value = document.getElementById('pieceFinW').value / 2;
+  }
+}
+
+// ── Piece Management ──
+function addPiece() {
+  const type = document.getElementById('pieceType').value;
+  const finW = parseFloat(document.getElementById('pieceFinW').value);
+  const finH = (type === 'rect' || type === 'flygeese') ? parseFloat(document.getElementById('pieceFinH').value) : finW;
+  const qty = parseInt(document.getElementById('pieceQty').value) || 1;
+  const color = document.getElementById('pieceColor').value;
+  const name = document.getElementById('pieceFabricName').value || 'Unnamed';
+
+  const piece = { type, finW, finH, qty, color, name };
+
+  if (type === 'hst') {
+    piece.color2 = document.getElementById('pieceColor2').value;
+    piece.name2 = document.getElementById('pieceFabricName2').value || 'Unnamed B';
+  }
+
+  blockPieces.push(piece);
+  renderPiecesList();
+}
+
+function removePiece(i) {
+  blockPieces.splice(i, 1);
+  renderPiecesList();
+}
+
+function clearPieces() {
+  blockPieces = [];
+  renderPiecesList();
+}
+
+function renderPiecesList() {
+  const list = document.getElementById('piecesList');
+  if (blockPieces.length === 0) {
+    list.innerHTML = '<p style="color:var(--muted);font-size:0.85rem;">No pieces yet.</p>';
+    return;
+  }
+  list.innerHTML = blockPieces.map((p, i) => {
+    const typeLabel = { square: 'Square', rect: 'Rect', hst: 'HST', flygeese: 'Flying Geese' }[p.type];
+    const dims = p.type === 'square' ? `${p.finW}″` : `${p.finW}×${p.finH}″`;
+    const hstExtra = p.type === 'hst' ? ` <span class="swatch" style="background:${p.color2};display:inline-block;vertical-align:middle;"></span> ${esc(p.name2)}` : '';
+    return `<div class="piece-item">
+      <div class="swatch" style="background:${p.color}"></div>
+      <div class="dims">${typeLabel} ${dims} ×${p.qty}</div>
+      <div style="font-size:0.8rem;color:var(--accent2);">${esc(p.name)}${hstExtra}</div>
+      <button class="btn btn-sm btn-danger" onclick="removePiece(${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function esc(s) { return s.replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// ── Cutting Math ──
+// For each piece type, calculate the cut size (finished + seam allowances)
+function cutSize(piece, seam) {
+  const s = seam;
+  switch (piece.type) {
+    case 'square':
+      return { w: piece.finW + 2 * s, h: piece.finW + 2 * s, note: `Cut ${fmtDim(piece.finW + 2*s)}″ square` };
+    case 'rect':
+      return { w: piece.finW + 2 * s, h: piece.finH + 2 * s, note: `Cut ${fmtDim(piece.finW + 2*s)}″ × ${fmtDim(piece.finH + 2*s)}″` };
+    case 'hst':
+      // HST: cut square ⅞″ larger than finished, cut diagonally = 2 HSTs per square
+      const hstCut = piece.finW + 0.875;
+      return { w: hstCut, h: hstCut, yieldsTwo: true, note: `Cut ${fmtDim(hstCut)}″ square, cut ╲ = 2 HSTs` };
+    case 'flygeese':
+      // Flying geese: large triangle from square cut +1¼″, small from square cut +⅞″
+      const fgLargeCut = piece.finW + 1.25;
+      const fgSmallCut = piece.finH + 0.875;
+      return {
+        w: fgLargeCut, h: fgLargeCut,
+        smallW: fgSmallCut, smallH: fgSmallCut,
+        yieldsFour: true,
+        note: `Lg: ${fmtDim(fgLargeCut)}″ sq (cut ╳ = 4 geese), Sm: ${fmtDim(fgSmallCut)}″ sq (cut ╲ = 2)`
+      };
+    default:
+      return { w: piece.finW + 2 * s, h: piece.finW + 2 * s, note: '' };
+  }
+}
+
+function fmtDim(v) {
+  const whole = Math.floor(v);
+  const frac = v - whole;
+  const fracs = [
+    [0.125, '⅛'], [0.25, '¼'], [0.375, '⅜'], [0.5, '½'],
+    [0.625, '⅝'], [0.75, '¾'], [0.875, '⅞']
+  ];
+  if (Math.abs(frac) < 0.01) return `${whole}`;
+  for (const [val, sym] of fracs) {
+    if (Math.abs(frac - val) < 0.01) return whole > 0 ? `${whole}${sym}` : sym;
+  }
+  return v.toFixed(2);
+}
+
+function yardsToFraction(yards) {
+  // Round up to nearest ⅛ yard
+  const eighths = Math.ceil(yards * 8);
+  const whole = Math.floor(eighths / 8);
+  const rem = eighths % 8;
+  const fracs = ['', '⅛', '¼', '⅜', '½', '⅝', '¾', '⅞'];
+  if (rem === 0) return `${whole}`;
+  return whole > 0 ? `${whole} ${fracs[rem]}` : fracs[rem];
+}
+
+// ── Main Calculation ──
+function calculate() {
+  if (blockPieces.length === 0) return alert('Add at least one piece to your block.');
+
+  const quiltW = parseFloat(document.getElementById('quiltW').value);
+  const quiltH = parseFloat(document.getElementById('quiltH').value);
+  const blockSz = parseFloat(document.getElementById('blockSize').value);
+  const seam = parseFloat(document.getElementById('seamAllowance').value);
+  const wof = parseFloat(document.getElementById('wof').value);
+  const sashW = parseFloat(document.getElementById('sashW').value) || 0;
+  const borderW = parseFloat(document.getElementById('borderW').value) || 0;
+  const bindingW = parseFloat(document.getElementById('bindingW').value) || 0;
+  const calcBacking = document.getElementById('calcBacking').checked;
+
+  // Calculate grid
+  const innerW = quiltW - 2 * borderW;
+  const innerH = quiltH - 2 * borderW;
+  const cols = Math.max(1, Math.floor((innerW + sashW) / (blockSz + sashW)));
+  const rows = Math.max(1, Math.floor((innerH + sashW) / (blockSz + sashW)));
+  const totalBlocks = rows * cols;
+
+  // Fabric requirements map: fabricKey -> { name, color, strips: [{cutW, cutH, count, note}], totalInches }
+  const fabrics = {};
+
+  function getFabric(name, color) {
+    const key = `${name}|||${color}`;
+    if (!fabrics[key]) fabrics[key] = { name, color, cuts: [], totalSqIn: 0 };
+    return fabrics[key];
+  }
+
+  // Block pieces
+  blockPieces.forEach(piece => {
+    const cs = cutSize(piece, seam);
+    const totalQtyPerBlock = piece.qty;
+    const totalQty = totalQtyPerBlock * totalBlocks;
+
+    if (piece.type === 'hst') {
+      // Each square yields 2 HSTs, need totalQty HSTs
+      const squaresNeeded = Math.ceil(totalQty / 2);
+      const fab1 = getFabric(piece.name, piece.color);
+      const fab2 = getFabric(piece.name2, piece.color2);
+      fab1.cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'hst' });
+      fab2.cuts.push({ cutW: cs.w, cutH: cs.h, count: squaresNeeded, note: cs.note, pieceType: 'hst' });
+    } else if (piece.type === 'flygeese') {
+      // Each large square yields 4 geese, each small square yields 2 corners
+      const largeNeeded = Math.ceil(totalQty / 4);
+      const smallNeeded = totalQty * 2; // 2 corner squares per goose
+      const smallSquaresNeeded = Math.ceil(smallNeeded / 2); // each cut in half
+      const fab = getFabric(piece.name, piece.color);
+      fab.cuts.push({ cutW: cs.w, cutH: cs.h, count: largeNeeded, note: `Lg sq: ${fmtDim(cs.w)}″ (cut ╳ = 4)`, pieceType: 'flygeese-lg' });
+      // For flying geese, if there's a second fabric for corners, use fabric B color
+      // but since we don't have a color2 for flying geese, use same fabric
+      fab.cuts.push({ cutW: cs.smallW, cutH: cs.smallH, count: smallNeeded, note: `Sm sq: ${fmtDim(cs.smallW)}″ (corners)`, pieceType: 'flygeese-sm' });
+    } else {
+      const fab = getFabric(piece.name, piece.color);
+      fab.cuts.push({ cutW: cs.w, cutH: cs.h, count: totalQty, note: cs.note, pieceType: piece.type });
+    }
+  });
+
+  // Sashing
+  if (sashW > 0) {
+    const sashName = document.getElementById('sashFabricName').value || 'Sashing';
+    const sashColor = document.getElementById('sashColor').value;
+    const fab = getFabric(sashName, sashColor);
+    // Vertical sashing strips between columns
+    const vertSash = rows * (cols - 1);
+    const vertCutW = sashW + 2 * seam;
+    const vertCutH = blockSz + 2 * seam;
+    if (vertSash > 0) {
+      fab.cuts.push({ cutW: vertCutW, cutH: vertCutH, count: vertSash, note: `Vert sashing ${fmtDim(vertCutW)}×${fmtDim(vertCutH)}″`, pieceType: 'sashing' });
+    }
+    // Horizontal sashing rows
+    const horizSash = rows - 1;
+    const horizStripW = innerW;
+    const horizCutH = sashW + 2 * seam;
+    if (horizSash > 0) {
+      fab.cuts.push({ cutW: horizStripW, cutH: horizCutH, count: horizSash, note: `Horiz sashing ${fmtDim(horizStripW)}×${fmtDim(horizCutH)}″`, pieceType: 'sashing' });
+    }
+  }
+
+  // Border
+  if (borderW > 0) {
+    const bdrName = document.getElementById('borderFabricName').value || 'Border';
+    const bdrColor = document.getElementById('borderColor').value;
+    const fab = getFabric(bdrName, bdrColor);
+    const cutW = borderW + 2 * seam;
+    // 2 side borders (full height) + 2 top/bottom (full width)
+    fab.cuts.push({ cutW: quiltW, cutH: cutW, count: 2, note: `Top/bottom border ${fmtDim(quiltW)}×${fmtDim(cutW)}″`, pieceType: 'border' });
+    fab.cuts.push({ cutW: cutW, cutH: quiltH, count: 2, note: `Side border ${fmtDim(cutW)}×${fmtDim(quiltH)}″`, pieceType: 'border' });
+  }
+
+  // Binding (2.5″ strips, joined, enough to go around perimeter + ~12″ extra)
+  if (bindingW > 0) {
+    const bindName = document.getElementById('bindingFabricName').value || 'Binding';
+    const bindColor = document.getElementById('bindingColor').value;
+    const fab = getFabric(bindName, bindColor);
+    const perimeter = 2 * (quiltW + quiltH) + 12; // extra for joining
+    const stripsNeeded = Math.ceil(perimeter / wof);
+    fab.cuts.push({ cutW: wof, cutH: bindingW, count: stripsNeeded, note: `${stripsNeeded} strips × ${fmtDim(bindingW)}″ wide (WOF)`, pieceType: 'binding' });
+  }
+
+  // Calculate yardage per fabric
+  const fabricList = Object.values(fabrics).map(fab => {
+    let totalStripInches = 0;
+
+    fab.stripDetails = [];
+    fab.cuts.forEach(cut => {
+      // How many pieces fit across WOF?
+      const acrossWOF = Math.floor(wof / cut.cutW);
+      if (acrossWOF <= 0) {
+        // Piece wider than WOF — need to piece strips or cut lengthwise
+        const strips = cut.count;
+        const inchesNeeded = strips * cut.cutH;
+        totalStripInches += inchesNeeded;
+        fab.stripDetails.push({ ...cut, strips, stripHeight: cut.cutH, acrossWOF: 1, note: cut.note + ' (wider than WOF — cut lengthwise)' });
+      } else {
+        const strips = Math.ceil(cut.count / acrossWOF);
+        const stripHeight = cut.cutH;
+        totalStripInches += strips * stripHeight;
+        fab.stripDetails.push({ ...cut, strips, stripHeight, acrossWOF });
+      }
+    });
+
+    fab.totalInches = totalStripInches;
+    fab.totalYards = totalStripInches / 36;
+    fab.yardsDisplay = yardsToFraction(fab.totalYards);
+    return fab;
+  });
+
+  // Backing
+  let backingYards = null;
+  if (calcBacking) {
+    // Standard: quilt + 4″ each side
+    const backW = quiltW + 8;
+    const backH = quiltH + 8;
+    if (backW <= wof) {
+      backingYards = backH / 36;
+    } else {
+      const panels = Math.ceil(backW / wof);
+      backingYards = (backH * panels) / 36;
+    }
+    backingYards = Math.ceil(backingYards * 8) / 8; // round to ⅛
+  }
+
+  renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam);
+}
+
+// ── Rendering ──
+function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam) {
+  const area = document.getElementById('resultArea');
+  let html = '';
+
+  // Stats
+  html += `<div class="stats">
+    <div class="stat"><div class="val">${cols}×${rows}</div><div class="lbl">Block Grid</div></div>
+    <div class="stat"><div class="val">${totalBlocks}</div><div class="lbl">Total Blocks</div></div>
+    <div class="stat"><div class="val">${quiltW}×${quiltH}″</div><div class="lbl">Quilt Size</div></div>
+    <div class="stat"><div class="val">${fabricList.length}</div><div class="lbl">Fabrics</div></div>
+  </div>`;
+
+  // Quilt Preview
+  html += `<div class="panel"><h2>🖼 Quilt Preview</h2><div class="canvas-wrap"><canvas id="quiltCanvas"></canvas></div></div>`;
+
+  // Yardage Table
+  html += `<div class="panel"><h2>📊 Fabric Yardage</h2>`;
+  html += `<table class="fabric-table">
+    <thead><tr><th>Fabric</th><th>Color</th><th>Yardage</th><th>Inches</th></tr></thead><tbody>`;
+  fabricList.forEach(f => {
+    html += `<tr>
+      <td>${esc(f.name)}</td>
+      <td><span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:${f.color};vertical-align:middle;border:1px solid rgba(255,255,255,0.2);"></span></td>
+      <td><strong>${f.yardsDisplay} yd</strong></td>
+      <td>${fmtDim(f.totalInches)}″</td>
+    </tr>`;
+  });
+  if (backingYards !== null) {
+    html += `<tr><td>Backing</td><td>—</td><td><strong>${yardsToFraction(backingYards)} yd</strong></td><td>${fmtDim(backingYards * 36)}″</td></tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  // Cutting Instructions
+  html += `<div class="panel"><h2>✂️ Cutting Instructions</h2>`;
+  fabricList.forEach(f => {
+    html += `<h3 style="color:var(--accent);font-size:0.95rem;margin-top:12px;margin-bottom:8px;">
+      <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${f.color};vertical-align:middle;margin-right:6px;border:1px solid rgba(255,255,255,0.2);"></span>
+      ${esc(f.name)}</h3>`;
+    html += `<table class="fabric-table"><thead><tr><th>Cut</th><th>Size</th><th>Qty</th><th>Strips (WOF)</th></tr></thead><tbody>`;
+    f.stripDetails.forEach(d => {
+      html += `<tr>
+        <td>${d.note}</td>
+        <td>${fmtDim(d.cutW)}×${fmtDim(d.cutH)}″</td>
+        <td>${d.count}</td>
+        <td>${d.strips} strip${d.strips > 1 ? 's' : ''} @ ${fmtDim(d.stripHeight)}″</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  });
+  html += `</div>`;
+
+  // Shopping List (compact)
+  html += `<div class="panel"><h2>🛒 Shopping List</h2>`;
+  html += `<table class="fabric-table"><thead><tr><th>Fabric</th><th>Buy</th></tr></thead><tbody>`;
+  fabricList.forEach(f => {
+    html += `<tr><td><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${f.color};vertical-align:middle;margin-right:6px;border:1px solid rgba(255,255,255,0.2);"></span>${esc(f.name)}</td><td><strong>${f.yardsDisplay} yard${f.totalYards > 1 ? 's' : ''}</strong></td></tr>`;
+  });
+  if (backingYards !== null) {
+    html += `<tr><td>Backing</td><td><strong>${yardsToFraction(backingYards)} yard${backingYards > 1 ? 's' : ''}</strong></td></tr>`;
+  }
+  html += `</tbody></table></div>`;
+
+  area.innerHTML = html;
+
+  drawQuiltPreview(quiltW, quiltH, blockSz, rows, cols, sashW, borderW, seam);
+}
+
+function drawQuiltPreview(quiltW, quiltH, blockSz, rows, cols, sashW, borderW, seam) {
+  const canvas = document.getElementById('quiltCanvas');
+  if (!canvas) return;
+
+  const maxW = 600, maxH = 500;
+  const scale = Math.min(maxW / quiltW, maxH / quiltH);
+  const w = Math.round(quiltW * scale);
+  const h = Math.round(quiltH * scale);
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+
+  // Background / border
+  const borderColor = document.getElementById('borderColor').value;
+  ctx.fillStyle = borderW > 0 ? borderColor : '#333';
+  ctx.fillRect(0, 0, w, h);
+
+  const bdr = borderW * scale;
+  const sash = sashW * scale;
+  const blk = blockSz * scale;
+  const sashColor = document.getElementById('sashColor').value;
+
+  // Sashing background
+  if (sashW > 0) {
+    ctx.fillStyle = sashColor;
+    ctx.fillRect(bdr, bdr, w - 2 * bdr, h - 2 * bdr);
+  }
+
+  // Draw blocks
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const bx = bdr + c * (blk + sash);
+      const by = bdr + r * (blk + sash);
+      drawBlockPreview(ctx, bx, by, blk, blockPieces);
+    }
+  }
+
+  // Border label
+  if (borderW > 0) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bdr, bdr, w - 2 * bdr, h - 2 * bdr);
+  }
+}
+
+function drawBlockPreview(ctx, x, y, size, pieces) {
+  // Simple block rendering: divide block into a grid based on pieces
+  if (pieces.length === 0) {
+    ctx.fillStyle = '#555';
+    ctx.fillRect(x, y, size, size);
+    return;
+  }
+
+  // Layout pieces in a simple grid pattern within the block
+  const n = pieces.reduce((s, p) => s + p.qty, 0);
+  const gridSide = Math.ceil(Math.sqrt(n));
+  const cellW = size / gridSide;
+  const cellH = size / gridSide;
+
+  let idx = 0;
+  pieces.forEach(piece => {
+    for (let q = 0; q < piece.qty && idx < gridSide * gridSide; q++) {
+      const col = idx % gridSide;
+      const row = Math.floor(idx / gridSide);
+      const cx = x + col * cellW;
+      const cy = y + row * cellH;
+
+      if (piece.type === 'hst') {
+        // Draw two triangles
+        ctx.fillStyle = piece.color;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + cellW, cy);
+        ctx.lineTo(cx, cy + cellH);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = piece.color2;
+        ctx.beginPath();
+        ctx.moveTo(cx + cellW, cy);
+        ctx.lineTo(cx + cellW, cy + cellH);
+        ctx.lineTo(cx, cy + cellH);
+        ctx.closePath();
+        ctx.fill();
+      } else if (piece.type === 'flygeese') {
+        // Center triangle + 2 corners
+        ctx.fillStyle = piece.color;
+        ctx.beginPath();
+        ctx.moveTo(cx + cellW / 2, cy);
+        ctx.lineTo(cx + cellW, cy + cellH);
+        ctx.lineTo(cx, cy + cellH);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#ddd';
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + cellW / 2, cy);
+        ctx.lineTo(cx, cy + cellH);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(cx + cellW / 2, cy);
+        ctx.lineTo(cx + cellW, cy);
+        ctx.lineTo(cx + cellW, cy + cellH);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.fillStyle = piece.color;
+        ctx.fillRect(cx, cy, cellW, cellH);
+      }
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(cx, cy, cellW, cellH);
+
+      idx++;
+    }
+  });
+
+  // Fill remaining cells
+  while (idx < gridSide * gridSide) {
+    const col = idx % gridSide;
+    const row = Math.floor(idx / gridSide);
+    ctx.fillStyle = '#444';
+    ctx.fillRect(x + col * cellW, y + row * cellH, cellW, cellH);
+    idx++;
+  }
+}
+
+// ── Examples ──
+function loadExample(name) {
+  const examples = {
+    ninepatch: {
+      quiltW: 50, quiltH: 65, blockSize: 9, sashW: 1.5, borderW: 3, bindingW: 2.5,
+      pieces: [
+        { type: 'square', finW: 3, finH: 3, qty: 5, color: '#4a6fa5', name: 'Blue' },
+        { type: 'square', finW: 3, finH: 3, qty: 4, color: '#f5f5dc', name: 'Cream' },
+      ]
+    },
+    pinwheel: {
+      quiltW: 60, quiltH: 72, blockSize: 12, sashW: 2, borderW: 4, bindingW: 2.5,
+      pieces: [
+        { type: 'hst', finW: 6, finH: 6, qty: 4, color: '#c0392b', name: 'Red', color2: '#ecf0f1', name2: 'White' },
+      ]
+    },
+    star: {
+      quiltW: 68, quiltH: 90, blockSize: 12, sashW: 2, borderW: 4, bindingW: 2.5,
+      pieces: [
+        { type: 'square', finW: 3, finH: 3, qty: 1, color: '#e07a5f', name: 'Gold Center' },
+        { type: 'hst', finW: 3, finH: 3, qty: 4, color: '#264653', name: 'Navy Points', color2: '#f5f5dc', name2: 'Background' },
+        { type: 'square', finW: 3, finH: 3, qty: 4, color: '#f5f5dc', name: 'Background' },
+        { type: 'flygeese', finW: 6, finH: 3, qty: 4, color: '#264653', name: 'Navy Points' },
+      ]
+    },
+    railfence: {
+      quiltW: 50, quiltH: 65, blockSize: 9, sashW: 0, borderW: 3, bindingW: 2.5,
+      pieces: [
+        { type: 'rect', finW: 9, finH: 3, qty: 1, color: '#2a9d8f', name: 'Teal' },
+        { type: 'rect', finW: 9, finH: 3, qty: 1, color: '#e9c46a', name: 'Gold' },
+        { type: 'rect', finW: 9, finH: 3, qty: 1, color: '#e07a5f', name: 'Coral' },
+      ]
+    },
+  };
+
+  const ex = examples[name];
+  if (!ex) return;
+
+  document.getElementById('quiltW').value = ex.quiltW;
+  document.getElementById('quiltH').value = ex.quiltH;
+  document.getElementById('blockSize').value = ex.blockSize;
+  document.getElementById('sashW').value = ex.sashW;
+  document.getElementById('borderW').value = ex.borderW;
+  document.getElementById('bindingW').value = ex.bindingW;
+  blockPieces = ex.pieces.map(p => ({ ...p }));
+  renderPiecesList();
+  calculate();
+}
+
+// ── Import/Export ──
+function getProject() {
+  return {
+    version: 1,
+    quiltW: parseFloat(document.getElementById('quiltW').value),
+    quiltH: parseFloat(document.getElementById('quiltH').value),
+    blockSize: parseFloat(document.getElementById('blockSize').value),
+    seamAllowance: parseFloat(document.getElementById('seamAllowance').value),
+    wof: parseFloat(document.getElementById('wof').value),
+    sashW: parseFloat(document.getElementById('sashW').value),
+    sashColor: document.getElementById('sashColor').value,
+    sashFabricName: document.getElementById('sashFabricName').value,
+    borderW: parseFloat(document.getElementById('borderW').value),
+    borderColor: document.getElementById('borderColor').value,
+    borderFabricName: document.getElementById('borderFabricName').value,
+    bindingW: parseFloat(document.getElementById('bindingW').value),
+    bindingColor: document.getElementById('bindingColor').value,
+    bindingFabricName: document.getElementById('bindingFabricName').value,
+    calcBacking: document.getElementById('calcBacking').checked,
+    pieces: blockPieces,
+  };
+}
+
+function exportJSON() {
+  const json = JSON.stringify(getProject(), null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'quiltplanner-project.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function showImportModal() {
+  document.getElementById('importModal').classList.add('active');
+  document.getElementById('importData').value = '';
+  document.getElementById('importError').textContent = '';
+}
+
+function closeImportModal() {
+  document.getElementById('importModal').classList.remove('active');
+}
+
+function doImport() {
+  try {
+    const data = JSON.parse(document.getElementById('importData').value);
+    if (!data.pieces || !Array.isArray(data.pieces)) throw new Error('Invalid project format');
+    document.getElementById('quiltW').value = data.quiltW || 50;
+    document.getElementById('quiltH').value = data.quiltH || 65;
+    document.getElementById('blockSize').value = data.blockSize || 12;
+    document.getElementById('seamAllowance').value = data.seamAllowance || 0.25;
+    document.getElementById('wof').value = data.wof || 42;
+    document.getElementById('sashW').value = data.sashW || 0;
+    document.getElementById('sashColor').value = data.sashColor || '#f5f5dc';
+    document.getElementById('sashFabricName').value = data.sashFabricName || 'Sashing';
+    document.getElementById('borderW').value = data.borderW || 0;
+    document.getElementById('borderColor').value = data.borderColor || '#2f4f4f';
+    document.getElementById('borderFabricName').value = data.borderFabricName || 'Border';
+    document.getElementById('bindingW').value = data.bindingW || 2.5;
+    document.getElementById('bindingColor').value = data.bindingColor || '#333333';
+    document.getElementById('bindingFabricName').value = data.bindingFabricName || 'Binding';
+    document.getElementById('calcBacking').checked = data.calcBacking !== false;
+    blockPieces = data.pieces;
+    renderPiecesList();
+    closeImportModal();
+    calculate();
+  } catch (e) {
+    document.getElementById('importError').textContent = 'Error: ' + e.message;
+  }
+}
+
+// ── Start ──
+init();
+</script>
+</body>
+</html>
