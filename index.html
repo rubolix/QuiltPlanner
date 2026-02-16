@@ -266,8 +266,10 @@ footer a { color: var(--teal); }
   </div>
   <div class="import-export-group">
     <button class="btn btn-outline" onclick="exportJSON()">📋 Export JSON</button>
+    <button class="btn btn-outline" onclick="exportCSV()">📋 Export CSV</button>
     <button class="btn btn-outline" onclick="exportPDF()">📄 Print / PDF</button>
     <button class="btn btn-outline" onclick="showImportModal()">📥 Import JSON</button>
+    <button class="btn btn-outline" onclick="showCSVImportModal()">📥 Import CSV</button>
     <button class="btn btn-outline" onclick="window.print()">🖨 Print</button>
   </div>
 </div>
@@ -300,6 +302,24 @@ footer a { color: var(--teal); }
     <div class="actions">
       <button class="btn btn-green" onclick="doImport()">Import</button>
       <button class="btn btn-outline" onclick="closeImportModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- CSV Import Modal -->
+<div class="modal-overlay" id="csvImportModal">
+  <div class="modal">
+    <h3>📥 Import Pieces (CSV)</h3>
+    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:8px;">
+      Format: type,finW,finH,qty,color,name[,color2,name2]<br>
+      Types: square, rect, hst, qst, flygeese, strip, circle
+    </p>
+    <textarea id="csvImportData" placeholder="square,3,3,5,#5b8a8a,Teal
+hst,6,6,4,#c0392b,Red,#f5f0e6,White"></textarea>
+    <div id="csvImportError" style="color:#c0392b;font-size:0.85rem;margin-top:8px;"></div>
+    <div class="actions">
+      <button class="btn btn-green" onclick="doCSVImport()">Import</button>
+      <button class="btn btn-outline" onclick="closeCSVImportModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -768,11 +788,11 @@ function calculate() {
     backingYards = Math.ceil(((backH * panels) / 36) * 8) / 8;
   }
 
-  renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam, wastePct);
+  renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam, wastePct, wof, calcBacking);
 }
 
 // ── Rendering ──
-function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam, wastePct) {
+function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam, wastePct, wof, calcBacking) {
   const area = document.getElementById('resultArea');
   let html = '';
 
@@ -806,6 +826,9 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   if (backingYards !== null) {
     html += `<tr><td>Backing</td><td>—</td><td><strong>${yardsToFraction(backingYards)} yd</strong></td><td></td></tr>`;
   }
+  if (calcBacking) {
+    html += `<tr><td>Batting</td><td>—</td><td><strong>${quiltW + 8}″ × ${quiltH + 8}″</strong></td><td></td></tr>`;
+  }
   html += `</tbody></table></div>`;
 
   // Cutting Instructions
@@ -836,7 +859,21 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   if (backingYards !== null) {
     html += `<tr><td>Backing</td><td><strong>${yardsToFraction(backingYards)} yd</strong></td></tr>`;
   }
+  if (calcBacking) {
+    html += `<tr><td>Batting</td><td><strong>${quiltW + 8}″ × ${quiltH + 8}″</strong></td></tr>`;
+  }
   html += `</tbody></table></div>`;
+
+  // Cutting Layouts
+  html += `<div class="panel"><h2>✂️ Cutting Layouts</h2>`;
+  html += `<p style="font-size:0.85rem;color:var(--muted);margin-bottom:12px;">Visual strip layout for each fabric — pieces packed left-to-right in WOF strips.</p>`;
+  fabricList.forEach((f, fi) => {
+    html += `<h3 style="color:var(--accent);font-size:0.95rem;margin-top:12px;margin-bottom:8px;">
+      <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${f.color};vertical-align:middle;margin-right:6px;border:1px solid rgba(0,0,0,0.15);"></span>
+      ${esc(f.name)} — ${f.stripDetails.reduce((s,d) => s + d.strips, 0)} strip(s)</h3>`;
+    html += `<div class="canvas-wrap"><canvas id="cutCanvas_${fi}"></canvas></div>`;
+  });
+  html += `</div>`;
 
   // Precut Compatibility
   html += `<div class="panel"><h2>🎁 Precut Compatibility</h2>`;
@@ -869,6 +906,7 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
 
   drawBlockPreviewLarge();
   drawQuiltPreview(quiltW, quiltH, blockSz, rows, cols, sashW, borderW);
+  drawCuttingLayouts(fabricList, wof);
 }
 
 function drawBlockPreviewLarge() {
@@ -945,6 +983,85 @@ function drawQuiltPreview(quiltW, quiltH, blockSz, rows, cols, sashW, borderW) {
   ctx.beginPath(); ctx.moveTo(ax, oy + 2); ctx.lineTo(ax, oy + h - 2); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(ax - 3, oy + 2); ctx.lineTo(ax + 3, oy + 2); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(ax - 3, oy + h - 2); ctx.lineTo(ax + 3, oy + h - 2); ctx.stroke();
+}
+
+function drawCuttingLayouts(fabricList, wof) {
+  const maxCanvasW = 700;
+  const stripGap = 4;
+  const labelH = 18;
+
+  fabricList.forEach((fab, fi) => {
+    const canvas = document.getElementById(`cutCanvas_${fi}`);
+    if (!canvas) return;
+
+    // Build list of all strips with their pieces
+    const strips = [];
+    fab.stripDetails.forEach(d => {
+      for (let s = 0; s < d.strips; s++) {
+        const piecesInStrip = (s < d.strips - 1) ? d.acrossWOF : (d.count - d.acrossWOF * (d.strips - 1));
+        strips.push({ stripHeight: d.stripHeight, cutW: d.cutW, cutH: d.cutH, count: Math.max(1, piecesInStrip), note: d.note, color: fab.color });
+      }
+    });
+
+    if (strips.length === 0) { canvas.width = 0; canvas.height = 0; return; }
+
+    const scale = Math.min(maxCanvasW / wof, 12);
+    const canvasW = Math.round(wof * scale);
+    const totalH = strips.reduce((s, st) => s + Math.round(st.stripHeight * scale) + stripGap + labelH, 0) + 10;
+
+    canvas.width = canvasW + 40;
+    canvas.height = totalH;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    let curY = 5;
+    strips.forEach((strip, si) => {
+      const sh = Math.round(strip.stripHeight * scale);
+      const sw = canvasW;
+
+      // Strip label
+      ctx.fillStyle = '#5a554e';
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(`Strip ${si + 1}: ${fmtDim(strip.stripHeight)}″ tall`, 2, curY);
+      curY += labelH;
+
+      // Waste background
+      ctx.fillStyle = '#f0ede8';
+      ctx.fillRect(0, curY, sw, sh);
+      ctx.strokeStyle = '#d5d0c9';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, curY, sw, sh);
+
+      // Draw pieces left-to-right
+      let px = 0;
+      for (let i = 0; i < strip.count; i++) {
+        const pw = Math.round(strip.cutW * scale);
+        if (px + pw > sw) break;
+        ctx.fillStyle = strip.color;
+        ctx.fillRect(px + 1, curY + 1, pw - 2, sh - 2);
+        // Piece dimension label
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 9px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (pw > 28 && sh > 14) {
+          ctx.fillText(`${fmtDim(strip.cutW)}×${fmtDim(strip.cutH)}`, px + pw / 2, curY + sh / 2);
+        }
+        px += pw;
+      }
+
+      // WOF label on right
+      ctx.fillStyle = '#8a847d';
+      ctx.font = '9px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${fmtDim(wof)}″ WOF`, sw + 4, curY + sh / 2);
+
+      curY += sh + stripGap;
+    });
+  });
 }
 
 function drawBlockPreview(ctx, x, y, size, pieces) {
@@ -1178,6 +1295,55 @@ function exportJSON() {
 function exportPDF() {
   calculate();
   window.print();
+}
+
+function exportCSV() {
+  let csv = 'type,finW,finH,qty,color,name,color2,name2\n';
+  blockPieces.forEach(p => {
+    csv += `${p.type},${p.finW},${p.finH || p.finW},${p.qty},${p.color},${p.name},${p.color2||''},${p.name2||''}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'quiltplanner-pieces.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function showCSVImportModal() {
+  document.getElementById('csvImportModal').classList.add('active');
+  document.getElementById('csvImportData').value = '';
+  document.getElementById('csvImportError').textContent = '';
+}
+function closeCSVImportModal() { document.getElementById('csvImportModal').classList.remove('active'); }
+
+function doCSVImport() {
+  try {
+    const text = document.getElementById('csvImportData').value.trim();
+    if (!text) throw new Error('No data');
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    const validTypes = ['square','rect','hst','qst','flygeese','strip','circle'];
+    let startIdx = 0;
+    if (lines[0].toLowerCase().startsWith('type')) startIdx = 1;
+    const newPieces = [];
+    for (let i = startIdx; i < lines.length; i++) {
+      const parts = lines[i].split(',').map(s => s.trim());
+      if (parts.length < 6) throw new Error(`Line ${i+1}: need at least 6 fields (type,finW,finH,qty,color,name)`);
+      const [type, fw, fh, qty, color, name] = parts;
+      if (!validTypes.includes(type)) throw new Error(`Line ${i+1}: invalid type "${type}"`);
+      const piece = { type, finW: parseFloat(fw), finH: parseFloat(fh), qty: parseInt(qty), color, name };
+      if (isNaN(piece.finW) || isNaN(piece.qty)) throw new Error(`Line ${i+1}: invalid numbers`);
+      if ((type === 'hst' || type === 'qst') && parts.length >= 8) {
+        piece.color2 = parts[6]; piece.name2 = parts[7];
+      }
+      newPieces.push(piece);
+    }
+    blockPieces.push(...newPieces);
+    renderPiecesList();
+    closeCSVImportModal();
+    if (blockPieces.length > 0) calculate();
+  } catch (e) {
+    document.getElementById('csvImportError').textContent = 'Error: ' + e.message;
+  }
 }
 
 function showImportModal() {
