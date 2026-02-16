@@ -195,6 +195,8 @@ footer a { color: var(--teal); }
   </div>
   <p class="tip">💡 Standard binding is 2½″ strips cut on WOF, joined for the perimeter.</p>
   <label><input type="checkbox" id="calcBacking" checked> Include backing calculation (quilt + 4″ per side)</label>
+  <label><input type="checkbox" id="prewashAdj"> Pre-wash shrinkage (+3%)</label>
+  <label><input type="checkbox" id="showCost" checked> Include cost estimates</label>
 </div>
 
 <!-- Block Designer -->
@@ -271,6 +273,7 @@ footer a { color: var(--teal); }
     <button class="btn btn-outline" onclick="showImportModal()">📥 Import JSON</button>
     <button class="btn btn-outline" onclick="showCSVImportModal()">📥 Import CSV</button>
     <button class="btn btn-outline" onclick="exportPDF()">🖨️ Print / PDF</button>
+    <button class="btn btn-outline" onclick="exportColoringPage()">🎨 Coloring Page</button>
   </div>
   <div id="printOptions" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
     <h2 style="font-size:0.9rem;color:var(--teal);margin-bottom:8px;">🖨️ Print Sections</h2>
@@ -379,6 +382,7 @@ hst,6,6,4,#c0392b,Red,#f5f0e6,White"></textarea>
 // ── State ──
 let blockPieces = [];
 let editingIndex = -1;
+let fabricPrices = {}; // keyed by fabric name, $/yard
 
 const SIZE_PRESETS = [
   { label: 'Baby', w: 36, h: 52 },
@@ -709,6 +713,8 @@ function calculate() {
   const bindingW = parseFloat(document.getElementById('bindingW').value) || 0;
   const calcBacking = document.getElementById('calcBacking').checked;
   const wastePct = (parseFloat(document.getElementById('wasteMargin').value) || 0) / 100;
+  const prewash = document.getElementById('prewashAdj').checked;
+  const showCost = document.getElementById('showCost').checked;
 
   const innerW = quiltW - 2 * borderW;
   const innerH = quiltH - 2 * borderW;
@@ -785,7 +791,9 @@ function calculate() {
       fab.stripDetails.push({ ...cut, strips, stripHeight, acrossWOF, note: cut.note + (wider ? ' (wider than WOF)' : '') });
     });
     fab.totalInches = totalStripInches;
-    const withWaste = totalStripInches * (1 + wastePct);
+    let multiplier = 1 + wastePct;
+    if (prewash) multiplier *= 1.03;
+    const withWaste = totalStripInches * multiplier;
     fab.totalYards = withWaste / 36;
     fab.yardsDisplay = yardsToFraction(fab.totalYards);
     fab.rawYards = totalStripInches / 36;
@@ -800,11 +808,11 @@ function calculate() {
     backingYards = Math.ceil(((backH * panels) / 36) * 8) / 8;
   }
 
-  renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam, wastePct, wof, calcBacking);
+  renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam, wastePct, wof, calcBacking, prewash, showCost);
 }
 
 // ── Rendering ──
-function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam, wastePct, wof, calcBacking) {
+function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, borderW, fabricList, backingYards, seam, wastePct, wof, calcBacking, prewash, showCost) {
   const area = document.getElementById('resultArea');
   let html = '';
 
@@ -881,7 +889,12 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
 
   // Yardage Table
   html += `<div class="panel" id="print-yardage"><h2>📊 Fabric Yardage</h2>`;
-  if (wastePct > 0) html += `<div class="waste-note">Includes ${Math.round(wastePct*100)}% waste margin for shrinkage and cutting errors.</div>`;
+  if (wastePct > 0 || prewash) {
+    let noteText = '';
+    if (wastePct > 0) noteText += `${Math.round(wastePct*100)}% waste margin`;
+    if (prewash) noteText += (noteText ? ' + ' : '') + '3% pre-wash shrinkage';
+    html += `<div class="waste-note">Includes ${noteText}.</div>`;
+  }
   html += `<table class="fabric-table">
     <thead><tr><th>Fabric</th><th></th><th>Yardage</th><th>Raw</th></tr></thead><tbody>`;
   fabricList.forEach(f => {
@@ -893,7 +906,21 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
     </tr>`;
   });
   if (backingYards !== null) {
-    html += `<tr><td>Backing</td><td>—</td><td><strong>${yardsToFraction(backingYards)} yd</strong></td><td></td></tr>`;
+    const backW = quiltW + 8, backH = quiltH + 8;
+    if (backW > wof) {
+      const horizYd = 2 * backH / 36;
+      const vertYd = 2 * backW / 36;
+      const bestOption = horizYd <= vertYd ? 'A' : 'B';
+      html += `<tr><td>Backing</td><td>—</td><td><strong>${yardsToFraction(backingYards)} yd</strong></td><td style="color:var(--muted);">Pieced (${backW}″ > WOF)</td></tr>`;
+      html += `<tr><td colspan="4" style="font-size:0.8rem;padding:8px;background:#f8f6f3;">
+        <strong>Pieced Backing Options:</strong><br>
+        Option A (horiz seam): 2 panels × ${fmtDim(backH)}″ = <strong>${yardsToFraction(horizYd)} yd</strong> ${bestOption==='A'?'✅ recommended':''}<br>
+        Option B (vert seam): 2 panels × ${fmtDim(backW)}″ = <strong>${yardsToFraction(vertYd)} yd</strong> ${bestOption==='B'?'✅ recommended':''}<br>
+        <span style="font-family:monospace;font-size:0.75rem;margin-top:4px;display:inline-block;">[Panel 1 ${fmtDim(wof)}″] | [Panel 2] → ${fmtDim(backW)}″ total</span>
+      </td></tr>`;
+    } else {
+      html += `<tr><td>Backing</td><td>—</td><td><strong>${yardsToFraction(backingYards)} yd</strong></td><td style="color:var(--muted);">Single width (${backW}″ ≤ WOF)</td></tr>`;
+    }
   }
   if (calcBacking) {
     html += `<tr><td>Batting</td><td>—</td><td><strong>${quiltW + 8}″ × ${quiltH + 8}″</strong></td><td></td></tr>`;
@@ -919,17 +946,38 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   });
   html += `</div>`;
 
-  // Shopping List
+  // Thread Calculator (Feature 4)
+  const quiltSqFt = (quiltW * quiltH) / 144;
+  const piecingThread = Math.ceil(quiltSqFt * 15);
+  const quiltingThread = Math.ceil(quiltSqFt * 25);
+  html += `<div class="panel" id="print-thread"><h2>🧵 Thread Estimate</h2>`;
+  html += `<table class="fabric-table"><thead><tr><th>Type</th><th>Est. Yards</th><th>Spools (~250yd)</th></tr></thead><tbody>`;
+  html += `<tr><td>Piecing thread</td><td>~${piecingThread} yd</td><td>${Math.ceil(piecingThread/250)}</td></tr>`;
+  html += `<tr><td>Quilting thread (medium density)</td><td>~${quiltingThread} yd</td><td>${Math.ceil(quiltingThread/250)}</td></tr>`;
+  html += `</tbody></table>`;
+  html += `<p class="tip">💡 Based on ~15 yd/sq ft for piecing, ~25 yd/sq ft for medium quilting density. Thread spools typically range 200–500 yards.</p>`;
+  html += `</div>`;
   html += `<div class="panel" id="print-shopping-list"><h2>🛒 Shopping List</h2>`;
-  html += `<table class="fabric-table"><thead><tr><th>Fabric</th><th>Buy</th></tr></thead><tbody>`;
+  const costColHdr = showCost ? '<th>$/yard</th><th>Cost</th>' : '';
+  html += `<table class="fabric-table"><thead><tr><th>Fabric</th><th>Buy</th>${costColHdr}</tr></thead><tbody>`;
   fabricList.forEach(f => {
-    html += `<tr><td><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${f.color};vertical-align:middle;margin-right:6px;border:1px solid rgba(0,0,0,0.15);"></span>${esc(f.name)}</td><td><strong>${f.yardsDisplay} yd</strong></td></tr>`;
+    if (!(f.name in fabricPrices)) fabricPrices[f.name] = 12;
+    const priceCell = showCost ? `<td><input type="number" class="fabric-price-input" data-fabric="${esc(f.name)}" value="${fabricPrices[f.name]}" min="0" step="0.5" style="width:70px;padding:4px 6px;font-size:0.85rem;"></td><td class="fabric-cost" data-fabric="${esc(f.name)}">$${(fabricPrices[f.name] * f.totalYards).toFixed(2)}</td>` : '';
+    html += `<tr><td><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${f.color};vertical-align:middle;margin-right:6px;border:1px solid rgba(0,0,0,0.15);"></span>${esc(f.name)}</td><td><strong>${f.yardsDisplay} yd</strong></td>${priceCell}</tr>`;
   });
   if (backingYards !== null) {
-    html += `<tr><td>Backing</td><td><strong>${yardsToFraction(backingYards)} yd</strong></td></tr>`;
+    if (!('Backing' in fabricPrices)) fabricPrices['Backing'] = 12;
+    const backPriceCell = showCost ? `<td><input type="number" class="fabric-price-input" data-fabric="Backing" value="${fabricPrices['Backing']}" min="0" step="0.5" style="width:70px;padding:4px 6px;font-size:0.85rem;"></td><td class="fabric-cost" data-fabric="Backing">$${(fabricPrices['Backing'] * backingYards).toFixed(2)}</td>` : '';
+    html += `<tr><td>Backing</td><td><strong>${yardsToFraction(backingYards)} yd</strong></td>${backPriceCell}</tr>`;
   }
   if (calcBacking) {
-    html += `<tr><td>Batting</td><td><strong>${quiltW + 8}″ × ${quiltH + 8}″</strong></td></tr>`;
+    html += `<tr><td>Batting</td><td><strong>${quiltW + 8}″ × ${quiltH + 8}″</strong></td>${showCost ? '<td></td><td></td>' : ''}</tr>`;
+  }
+  if (showCost) {
+    let grandTotal = 0;
+    fabricList.forEach(f => { grandTotal += (fabricPrices[f.name] || 12) * f.totalYards; });
+    if (backingYards !== null) grandTotal += (fabricPrices['Backing'] || 12) * backingYards;
+    html += `<tr style="border-top:2px solid var(--border);font-weight:bold;"><td colspan="2">Estimated Total</td><td></td><td id="costGrandTotal">$${grandTotal.toFixed(2)}</td></tr>`;
   }
   html += `</tbody></table></div>`;
 
@@ -976,6 +1024,29 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   drawBlockPreviewLarge();
   drawQuiltPreview(quiltW, quiltH, blockSz, rows, cols, sashW, borderW);
   drawCuttingLayouts(fabricList, wof);
+
+  // Cost estimator event listeners
+  if (showCost) {
+    document.querySelectorAll('.fabric-price-input').forEach(input => {
+      input.addEventListener('change', function() {
+        const fabName = this.dataset.fabric;
+        fabricPrices[fabName] = parseFloat(this.value) || 0;
+        // Update per-fabric cost displays
+        document.querySelectorAll(`.fabric-cost[data-fabric="${fabName}"]`).forEach(el => {
+          let yards = 0;
+          fabricList.forEach(f => { if (f.name === fabName) yards = f.totalYards; });
+          if (fabName === 'Backing' && backingYards !== null) yards = backingYards;
+          el.textContent = '$' + (fabricPrices[fabName] * yards).toFixed(2);
+        });
+        // Update grand total
+        let gt = 0;
+        fabricList.forEach(f => { gt += (fabricPrices[f.name] || 12) * f.totalYards; });
+        if (backingYards !== null) gt += (fabricPrices['Backing'] || 12) * backingYards;
+        const gtEl = document.getElementById('costGrandTotal');
+        if (gtEl) gtEl.textContent = '$' + gt.toFixed(2);
+      });
+    });
+  }
 }
 
 function drawBlockPreviewLarge() {
@@ -1480,6 +1551,126 @@ function doImport() {
   } catch (e) {
     document.getElementById('importError').textContent = 'Error: ' + e.message;
   }
+}
+
+// ── Coloring Page Export ──
+function exportColoringPage() {
+  if (blockPieces.length === 0) return alert('Add pieces and calculate first.');
+  const quiltW = parseFloat(document.getElementById('quiltW').value);
+  const quiltH = parseFloat(document.getElementById('quiltH').value);
+  const blockSz = parseFloat(document.getElementById('blockSize').value);
+  const sashW = parseFloat(document.getElementById('sashW').value) || 0;
+  const borderW = parseFloat(document.getElementById('borderW').value) || 0;
+  const innerW = quiltW - 2 * borderW;
+  const innerH = quiltH - 2 * borderW;
+  const cols = Math.max(1, Math.floor((innerW + sashW) / (blockSz + sashW)));
+  const rows = Math.max(1, Math.floor((innerH + sashW) / (blockSz + sashW)));
+
+  const pad = 60;
+  const titleH = 50;
+  const maxW = 700, maxH = 900;
+  const scale = Math.min(maxW / quiltW, maxH / quiltH);
+  const w = Math.round(quiltW * scale), h = Math.round(quiltH * scale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w + pad * 2;
+  canvas.height = h + pad + titleH + pad;
+  const ctx = canvas.getContext('2d');
+
+  // White background
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Title
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 18px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(`Quilt Coloring Page — ${quiltW}″ × ${quiltH}″`, canvas.width / 2, 16);
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.fillText(`${cols}×${rows} blocks of ${blockSz}″ | Sashing: ${sashW}″ | Border: ${borderW}″`, canvas.width / 2, 38);
+
+  const ox = pad, oy = titleH + pad / 2;
+  const bdr = borderW * scale, sash = sashW * scale, blk = blockSz * scale;
+
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 2;
+
+  // Outer border
+  ctx.strokeRect(ox, oy, w, h);
+
+  // Inner border line
+  if (borderW > 0) {
+    ctx.lineWidth = 1;
+    ctx.strokeRect(ox + bdr, oy + bdr, w - 2 * bdr, h - 2 * bdr);
+  }
+
+  // Sashing lines
+  ctx.lineWidth = 0.5;
+  if (sashW > 0) {
+    for (let c = 1; c < cols; c++) {
+      const sx = ox + bdr + c * blk + (c - 0.5) * sash;
+      ctx.beginPath(); ctx.moveTo(sx, oy + bdr); ctx.lineTo(sx, oy + h - bdr); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx + sash, oy + bdr); ctx.lineTo(sx + sash, oy + h - bdr); ctx.stroke();
+    }
+    for (let r = 1; r < rows; r++) {
+      const sy = oy + bdr + r * blk + (r - 0.5) * sash;
+      ctx.beginPath(); ctx.moveTo(ox + bdr, sy); ctx.lineTo(ox + w - bdr, sy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ox + bdr, sy + sash); ctx.lineTo(ox + w - bdr, sy + sash); ctx.stroke();
+    }
+  }
+
+  // Block internals
+  ctx.lineWidth = 0.75;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const bx = ox + bdr + c * (blk + sash);
+      const by = oy + bdr + r * (blk + sash);
+      ctx.strokeRect(bx, by, blk, blk);
+      drawBlockColoring(ctx, bx, by, blk, blockPieces);
+    }
+  }
+
+  // Open in new window for printing
+  const win = window.open('', '_blank');
+  if (!win) return alert('Please allow popups to open the coloring page.');
+  win.document.write(`<!DOCTYPE html><html><head><title>Coloring Page</title><style>body{margin:0;display:flex;justify-content:center;padding:20px;background:#fff;}@media print{body{padding:0;}}</style></head><body></body></html>`);
+  win.document.body.appendChild(canvas);
+  win.document.close();
+  setTimeout(() => win.print(), 500);
+}
+
+function drawBlockColoring(ctx, x, y, size, pieces) {
+  if (pieces.length === 0) return;
+  const n = pieces.reduce((s, p) => s + p.qty, 0);
+  const gridSide = Math.ceil(Math.sqrt(n));
+  const cellW = size / gridSide, cellH = size / gridSide;
+  let idx = 0;
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 0.5;
+  pieces.forEach(piece => {
+    for (let q = 0; q < piece.qty && idx < gridSide * gridSide; q++) {
+      const col = idx % gridSide, row = Math.floor(idx / gridSide);
+      const cx = x + col * cellW, cy = y + row * cellH;
+      ctx.strokeRect(cx, cy, cellW, cellH);
+      if (piece.type === 'hst') {
+        ctx.beginPath(); ctx.moveTo(cx, cy + cellH); ctx.lineTo(cx + cellW, cy); ctx.stroke();
+      } else if (piece.type === 'qst') {
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + cellW, cy + cellH); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx + cellW, cy); ctx.lineTo(cx, cy + cellH); ctx.stroke();
+      } else if (piece.type === 'flygeese') {
+        ctx.beginPath(); ctx.moveTo(cx + cellW / 2, cy); ctx.lineTo(cx, cy + cellH); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx + cellW / 2, cy); ctx.lineTo(cx + cellW, cy + cellH); ctx.stroke();
+      } else if (piece.type === 'strip') {
+        for (let i = 1; i < 3; i++) {
+          ctx.beginPath(); ctx.moveTo(cx, cy + cellH * i / 3); ctx.lineTo(cx + cellW, cy + cellH * i / 3); ctx.stroke();
+        }
+      } else if (piece.type === 'circle') {
+        ctx.beginPath(); ctx.arc(cx + cellW / 2, cy + cellH / 2, Math.min(cellW, cellH) * 0.42, 0, Math.PI * 2); ctx.stroke();
+      }
+      idx++;
+    }
+  });
 }
 
 // ── Start ──
