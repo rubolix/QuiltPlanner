@@ -809,12 +809,69 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   let html = '';
 
   // Stats
+  const actualW = cols * blockSz + Math.max(0, cols - 1) * sashW + 2 * borderW;
+  const actualH = rows * blockSz + Math.max(0, rows - 1) * sashW + 2 * borderW;
   html += `<div class="stats" id="print-stats">
     <div class="stat"><div class="val">${cols}×${rows}</div><div class="lbl">Block Grid</div></div>
     <div class="stat"><div class="val">${totalBlocks}</div><div class="lbl">Total Blocks</div></div>
-    <div class="stat"><div class="val">${quiltW}×${quiltH}″</div><div class="lbl">Quilt Size</div></div>
+    <div class="stat"><div class="val">${actualW}×${actualH}″</div><div class="lbl">Finished Size</div></div>
     <div class="stat"><div class="val">${fabricList.length}</div><div class="lbl">Fabrics</div></div>
   </div>`;
+
+  // Layout fit suggestions
+  const gapW = quiltW - actualW;
+  const gapH = quiltH - actualH;
+  if (gapW > 2 || gapH > 2 || gapW < -2 || gapH < -2) {
+    html += `<div class="panel" style="border-color:var(--accent);"><h2 style="color:var(--accent);">💡 Layout Suggestions</h2>`;
+    html += `<p style="font-size:0.85rem;margin-bottom:10px;">Your blocks produce a <strong>${actualW}×${actualH}″</strong> quilt, but your target is <strong>${quiltW}×${quiltH}″</strong>. Here are some options:</p>`;
+    html += `<div style="font-size:0.85rem;">`;
+
+    // Option 1: Adjust border to fill the gap
+    const neededBorderW = borderW + gapW / 2;
+    const neededBorderH = borderW + gapH / 2;
+    if (neededBorderW >= 0.5 && neededBorderH >= 0.5) {
+      const avgBorder = Math.round((neededBorderW + neededBorderH) / 2 * 8) / 8;
+      if (Math.abs(neededBorderW - neededBorderH) < 1) {
+        html += `<p>📏 <strong>Adjust border</strong> to <strong>${fmtDim(avgBorder)}″</strong> to reach ~${Math.round(cols*blockSz+(cols-1)*sashW+2*avgBorder)}×${Math.round(rows*blockSz+(rows-1)*sashW+2*avgBorder)}″</p>`;
+      } else {
+        html += `<p>📏 <strong>Use uneven borders:</strong> ${fmtDim(neededBorderW)}″ on sides, ${fmtDim(neededBorderH)}″ on top/bottom to exactly hit ${quiltW}×${quiltH}″</p>`;
+      }
+    }
+
+    // Option 2: Add a row or column
+    const suggestions = [];
+    if (gapW >= blockSz * 0.5) {
+      const newCols = cols + 1;
+      const newW = newCols * blockSz + Math.max(0, newCols - 1) * sashW + 2 * borderW;
+      suggestions.push(`Add a column → ${newCols}×${rows} grid = ${newW}×${actualH}″`);
+    }
+    if (gapH >= blockSz * 0.5) {
+      const newRows = rows + 1;
+      const newH = newRows * blockSz + Math.max(0, newRows - 1) * sashW + 2 * borderW;
+      suggestions.push(`Add a row → ${cols}×${newRows} grid = ${actualW}×${newH}″`);
+    }
+
+    // Option 3: Adjust sashing to fill gap
+    if (sashW > 0 && cols > 1 && rows > 1) {
+      const targetSashW = sashW + gapW / (cols - 1);
+      const targetSashH = sashW + gapH / (rows - 1);
+      const avgSash = Math.round(((targetSashW + targetSashH) / 2) * 8) / 8;
+      if (avgSash >= 0.5 && avgSash <= 6) {
+        html += `<p>🔲 <strong>Widen sashing</strong> to <strong>${fmtDim(avgSash)}″</strong> to fill the gap</p>`;
+      }
+    } else if (sashW === 0 && (gapW > 2 || gapH > 2)) {
+      const neededSashW = cols > 1 ? Math.round(gapW / (cols - 1) * 8) / 8 : 0;
+      const neededSashH = rows > 1 ? Math.round(gapH / (rows - 1) * 8) / 8 : 0;
+      const avgSash = Math.round(((neededSashW + neededSashH) / 2) * 8) / 8;
+      if (avgSash >= 0.5 && avgSash <= 4) {
+        html += `<p>🔲 <strong>Add ${fmtDim(avgSash)}″ sashing</strong> between blocks to fill the gap</p>`;
+      }
+    }
+
+    suggestions.forEach(s => { html += `<p>➕ <strong>${s}</strong></p>`; });
+
+    html += `</div></div>`;
+  }
 
   // Block Preview
   html += `<div class="panel" id="print-block-preview"><h2>🧱 Block Preview</h2><div class="canvas-wrap"><canvas id="blockCanvas"></canvas></div></div>`;
@@ -1166,20 +1223,20 @@ function drawBlockPreview(ctx, x, y, size, pieces) {
 function loadExample(name) {
   const examples = {
     ninepatch: {
-      quiltW: 50, quiltH: 65, blockSize: 9, sashW: 1.5, borderW: 3, bindingW: 2.5,
+      quiltW: 46.5, quiltH: 67.5, blockSize: 9, sashW: 1.5, borderW: 3, bindingW: 2.5,
       pieces: [
         { type: 'square', finW: 3, finH: 3, qty: 5, color: '#5b8a8a', name: 'Teal' },
         { type: 'square', finW: 3, finH: 3, qty: 4, color: '#f5f0e6', name: 'Cream' },
       ]
     },
     pinwheel: {
-      quiltW: 60, quiltH: 72, blockSize: 12, sashW: 2, borderW: 4, bindingW: 2.5,
+      quiltW: 60, quiltH: 74, blockSize: 12, sashW: 2, borderW: 3, bindingW: 2.5,
       pieces: [
         { type: 'hst', finW: 6, finH: 6, qty: 4, color: '#c0392b', name: 'Red', color2: '#f5f0e6', name2: 'White' },
       ]
     },
     star: {
-      quiltW: 68, quiltH: 90, blockSize: 12, sashW: 2, borderW: 4, bindingW: 2.5,
+      quiltW: 76, quiltH: 90, blockSize: 12, sashW: 2, borderW: 4, bindingW: 2.5,
       pieces: [
         { type: 'square', finW: 3, finH: 3, qty: 1, color: '#c87941', name: 'Gold Center' },
         { type: 'hst', finW: 3, finH: 3, qty: 4, color: '#3d5a80', name: 'Navy Points', color2: '#f5f0e6', name2: 'Background' },
@@ -1188,7 +1245,7 @@ function loadExample(name) {
       ]
     },
     railfence: {
-      quiltW: 50, quiltH: 65, blockSize: 9, sashW: 0, borderW: 3, bindingW: 2.5,
+      quiltW: 51, quiltH: 69, blockSize: 9, sashW: 0, borderW: 3, bindingW: 2.5,
       pieces: [
         { type: 'rect', finW: 9, finH: 3, qty: 1, color: '#5b8a8a', name: 'Teal' },
         { type: 'rect', finW: 9, finH: 3, qty: 1, color: '#c87941', name: 'Burnt Gold' },
@@ -1196,7 +1253,7 @@ function loadExample(name) {
       ]
     },
     logcabin: {
-      quiltW: 60, quiltH: 72, blockSize: 12, sashW: 0, borderW: 3, bindingW: 2.5,
+      quiltW: 54, quiltH: 66, blockSize: 12, sashW: 0, borderW: 3, bindingW: 2.5,
       pieces: [
         { type: 'square', finW: 3, finH: 3, qty: 1, color: '#c0392b', name: 'Red Center' },
         { type: 'rect', finW: 3, finH: 1.5, qty: 1, color: '#f5f0e6', name: 'Light 1' },
@@ -1210,14 +1267,14 @@ function loadExample(name) {
       ]
     },
     irishchain: {
-      quiltW: 72, quiltH: 90, blockSize: 12, sashW: 0, borderW: 4, bindingW: 2.5,
+      quiltW: 68, quiltH: 92, blockSize: 12, sashW: 0, borderW: 4, bindingW: 2.5,
       pieces: [
         { type: 'square', finW: 2.4, finH: 2.4, qty: 13, color: '#5b8a8a', name: 'Teal' },
         { type: 'square', finW: 2.4, finH: 2.4, qty: 12, color: '#f5f0e6', name: 'Cream' },
       ]
     },
     bowtie: {
-      quiltW: 60, quiltH: 72, blockSize: 10, sashW: 1, borderW: 3, bindingW: 2.5,
+      quiltW: 60, quiltH: 71, blockSize: 10, sashW: 1, borderW: 3, bindingW: 2.5,
       pieces: [
         { type: 'square', finW: 5, finH: 5, qty: 2, color: '#9caf88', name: 'Sage' },
         { type: 'square', finW: 5, finH: 5, qty: 2, color: '#c87941', name: 'Burnt Gold' },
@@ -1225,7 +1282,7 @@ function loadExample(name) {
       ]
     },
     churn: {
-      quiltW: 60, quiltH: 72, blockSize: 12, sashW: 2, borderW: 3, bindingW: 2.5,
+      quiltW: 60, quiltH: 60, blockSize: 12, sashW: 2, borderW: 3, bindingW: 2.5,
       pieces: [
         { type: 'square', finW: 4, finH: 4, qty: 1, color: '#f5f0e6', name: 'Background' },
         { type: 'hst', finW: 4, finH: 4, qty: 4, color: '#5b8a8a', name: 'Teal', color2: '#f5f0e6', name2: 'Background' },
@@ -1234,7 +1291,7 @@ function loadExample(name) {
       ]
     },
     bear: {
-      quiltW: 72, quiltH: 90, blockSize: 12, sashW: 2, borderW: 4, bindingW: 2.5,
+      quiltW: 76, quiltH: 90, blockSize: 12, sashW: 2, borderW: 4, bindingW: 2.5,
       pieces: [
         { type: 'square', finW: 3, finH: 3, qty: 1, color: '#c87941', name: 'Gold Center' },
         { type: 'square', finW: 3, finH: 3, qty: 4, color: '#f5f0e6', name: 'Background' },
@@ -1244,7 +1301,7 @@ function loadExample(name) {
       ]
     },
     ohio: {
-      quiltW: 68, quiltH: 90, blockSize: 12, sashW: 2, borderW: 4, bindingW: 2.5,
+      quiltW: 76, quiltH: 90, blockSize: 12, sashW: 2, borderW: 4, bindingW: 2.5,
       pieces: [
         { type: 'square', finW: 4, finH: 4, qty: 1, color: '#c87941', name: 'Gold Center' },
         { type: 'square', finW: 4, finH: 4, qty: 4, color: '#f5f0e6', name: 'Background' },
@@ -1253,14 +1310,14 @@ function loadExample(name) {
       ]
     },
     kaleidoscope: {
-      quiltW: 60, quiltH: 72, blockSize: 12, sashW: 1, borderW: 3, bindingW: 2.5,
+      quiltW: 57, quiltH: 70, blockSize: 12, sashW: 1, borderW: 3, bindingW: 2.5,
       pieces: [
         { type: 'qst', finW: 6, finH: 6, qty: 4, color: '#7b2d8e', name: 'Purple', color2: '#f5f0e6', name2: 'Background' },
         { type: 'square', finW: 6, finH: 6, qty: 0, color: '#f5f0e6', name: 'Background' },
       ]
     },
     stripgarden: {
-      quiltW: 50, quiltH: 65, blockSize: 10, sashW: 0, borderW: 3, bindingW: 2.5,
+      quiltW: 46, quiltH: 66, blockSize: 10, sashW: 0, borderW: 3, bindingW: 2.5,
       pieces: [
         { type: 'strip', finW: 10, finH: 2, qty: 1, color: '#5b8a8a', name: 'Teal' },
         { type: 'strip', finW: 10, finH: 2, qty: 1, color: '#c87941', name: 'Burnt Gold' },
@@ -1270,7 +1327,7 @@ function loadExample(name) {
       ]
     },
     modernapplique: {
-      quiltW: 36, quiltH: 52, blockSize: 10, sashW: 2, borderW: 3, bindingW: 2.5,
+      quiltW: 40, quiltH: 52, blockSize: 10, sashW: 2, borderW: 3, bindingW: 2.5,
       pieces: [
         { type: 'square', finW: 10, finH: 10, qty: 1, color: '#f5f0e6', name: 'Background' },
         { type: 'circle', finW: 6, finH: 6, qty: 1, color: '#c0392b', name: 'Red Circle' },
