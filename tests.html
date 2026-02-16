@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>QuiltPlanner Tests</title>
+<style>
+body { font-family: monospace; background: #faf8f5; color: #3a3632; padding: 20px; max-width: 800px; margin: 0 auto; }
+h2 { color: #5b8a8a; margin-top: 24px; }
+.pass { color: #4a8c5c; } .fail { color: #c0392b; font-weight: bold; }
+.summary { font-size: 1.2rem; margin-top: 20px; padding: 12px; border-radius: 6px; }
+.summary.ok { background: #e8f5e9; color: #2e7d32; }
+.summary.bad { background: #fce4ec; color: #c62828; }
+</style>
+</head>
+<body>
+<h1>🧵 QuiltPlanner Test Suite</h1>
+<div id="output"></div>
+<script>
+let passed = 0, failed = 0;
+const out = document.getElementById('output');
+
+function section(name) {
+  out.innerHTML += `<h2>${name}</h2>`;
+}
+
+function assert(condition, msg) {
+  if (condition) {
+    passed++;
+    out.innerHTML += `<div class="pass">  ✅ ${msg}</div>`;
+  } else {
+    failed++;
+    out.innerHTML += `<div class="fail">  ❌ FAIL: ${msg}</div>`;
+  }
+}
+
+function assertEq(actual, expected, msg) {
+  assert(actual === expected, `${msg} (expected ${expected}, got ${actual})`);
+}
+
+function assertClose(actual, expected, tol, msg) {
+  assert(Math.abs(actual - expected) < tol, `${msg} (expected ~${expected}, got ${actual})`);
+}
+
+// ══════════════════════════════════════
+// Inline copies of pure functions to test
+// ══════════════════════════════════════
+
+function fmtDim(v) {
+  const whole = Math.floor(v);
+  const frac = v - whole;
+  const fracs = [[0.125,'⅛'],[0.25,'¼'],[0.375,'⅜'],[0.5,'½'],[0.625,'⅝'],[0.75,'¾'],[0.875,'⅞']];
+  if (Math.abs(frac) < 0.01) return `${whole}`;
+  for (const [val, sym] of fracs) {
+    if (Math.abs(frac - val) < 0.01) return whole > 0 ? `${whole}${sym}` : sym;
+  }
+  return v.toFixed(2);
+}
+
+function yardsToFraction(yards) {
+  const eighths = Math.ceil(yards * 8);
+  const whole = Math.floor(eighths / 8);
+  const rem = eighths % 8;
+  const fracs = ['','⅛','¼','⅜','½','⅝','¾','⅞'];
+  if (rem === 0) return `${whole}`;
+  return whole > 0 ? `${whole} ${fracs[rem]}` : fracs[rem];
+}
+
+function cutSize(piece, seam) {
+  const s = seam;
+  switch (piece.type) {
+    case 'square':
+      return { w: piece.finW + 2*s, h: piece.finW + 2*s };
+    case 'rect':
+      return { w: piece.finW + 2*s, h: piece.finH + 2*s };
+    case 'hst': {
+      const hstCut = piece.finW + 0.875;
+      return { w: hstCut, h: hstCut, yieldsTwo: true };
+    }
+    case 'flygeese': {
+      const fgLg = piece.finW + 1.25;
+      const fgSm = piece.finH + 0.875;
+      return { w: fgLg, h: fgLg, smallW: fgSm, smallH: fgSm, yieldsFour: true };
+    }
+    default:
+      return { w: piece.finW + 2*s, h: piece.finW + 2*s };
+  }
+}
+
+function calcGrid(quiltW, quiltH, blockSz, borderW, sashW) {
+  const innerW = quiltW - 2 * borderW;
+  const innerH = quiltH - 2 * borderW;
+  const cols = Math.max(1, Math.floor((innerW + sashW) / (blockSz + sashW)));
+  const rows = Math.max(1, Math.floor((innerH + sashW) / (blockSz + sashW)));
+  return { rows, cols, total: rows * cols };
+}
+
+function calcStripsNeeded(count, cutW, wof) {
+  const acrossWOF = Math.max(1, Math.floor(wof / cutW));
+  return Math.ceil(count / acrossWOF);
+}
+
+function calcBacking(quiltW, quiltH, wof) {
+  const backW = quiltW + 8, backH = quiltH + 8;
+  const panels = backW <= wof ? 1 : Math.ceil(backW / wof);
+  return Math.ceil(((backH * panels) / 36) * 8) / 8;
+}
+
+function calcBinding(quiltW, quiltH, wof, bindingW) {
+  const perimeter = 2 * (quiltW + quiltH) + 12;
+  return Math.ceil(perimeter / wof);
+}
+
+// ══════════════════════════════════════
+// TESTS
+// ══════════════════════════════════════
+
+section('📏 fmtDim — Dimension Formatting');
+assertEq(fmtDim(3), '3', '3 → "3"');
+assertEq(fmtDim(3.5), '3½', '3.5 → "3½"');
+assertEq(fmtDim(3.25), '3¼', '3.25 → "3¼"');
+assertEq(fmtDim(3.75), '3¾', '3.75 → "3¾"');
+assertEq(fmtDim(3.125), '3⅛', '3.125 → "3⅛"');
+assertEq(fmtDim(3.875), '3⅞', '3.875 → "3⅞"');
+assertEq(fmtDim(0.25), '¼', '0.25 → "¼" (no leading 0)');
+assertEq(fmtDim(0.5), '½', '0.5 → "½"');
+assertEq(fmtDim(0), '0', '0 → "0"');
+assertEq(fmtDim(12), '12', '12 → "12"');
+
+section('📐 yardsToFraction — Yardage Rounding');
+assertEq(yardsToFraction(1), '1', '1 yard');
+assertEq(yardsToFraction(2), '2', '2 yards');
+assertEq(yardsToFraction(0.125), '⅛', '⅛ yard');
+assertEq(yardsToFraction(0.5), '½', '½ yard');
+assertEq(yardsToFraction(1.5), '1 ½', '1½ yards');
+assertEq(yardsToFraction(2.25), '2 ¼', '2¼ yards');
+assertEq(yardsToFraction(0.3), '⅜', '0.3 rounds up to ⅜');
+assertEq(yardsToFraction(0.01), '⅛', 'Tiny amount rounds up to ⅛');
+assertEq(yardsToFraction(0), '0', '0 yards');
+
+section('✂️ cutSize — Square Piece');
+let cs = cutSize({ type: 'square', finW: 3 }, 0.25);
+assertClose(cs.w, 3.5, 0.01, 'Square 3″ + ¼″ seam = 3½″ cut');
+assertClose(cs.h, 3.5, 0.01, 'Square height matches width');
+
+cs = cutSize({ type: 'square', finW: 6 }, 0.25);
+assertClose(cs.w, 6.5, 0.01, 'Square 6″ + ¼″ seam = 6½″ cut');
+
+cs = cutSize({ type: 'square', finW: 2 }, 0.5);
+assertClose(cs.w, 3, 0.01, 'Square 2″ + ½″ seam = 3″ cut');
+
+section('✂️ cutSize — Rectangle Piece');
+cs = cutSize({ type: 'rect', finW: 6, finH: 3 }, 0.25);
+assertClose(cs.w, 6.5, 0.01, 'Rect 6×3″ width + seam = 6½″');
+assertClose(cs.h, 3.5, 0.01, 'Rect 6×3″ height + seam = 3½″');
+
+section('✂️ cutSize — Half-Square Triangle');
+cs = cutSize({ type: 'hst', finW: 3 }, 0.25);
+assertClose(cs.w, 3.875, 0.01, 'HST 3″ finished → 3⅞″ cut (fin + ⅞)');
+assert(cs.yieldsTwo === true, 'HST yields 2 triangles per square');
+
+cs = cutSize({ type: 'hst', finW: 6 }, 0.25);
+assertClose(cs.w, 6.875, 0.01, 'HST 6″ finished → 6⅞″ cut');
+
+section('✂️ cutSize — Flying Geese');
+cs = cutSize({ type: 'flygeese', finW: 6, finH: 3 }, 0.25);
+assertClose(cs.w, 7.25, 0.01, 'FG large square: 6 + 1¼ = 7¼″');
+assertClose(cs.smallW, 3.875, 0.01, 'FG small square: 3 + ⅞ = 3⅞″');
+assert(cs.yieldsFour === true, 'FG yields 4 geese from large square');
+
+section('🔲 Grid Calculation');
+let g = calcGrid(50, 65, 12, 0, 0);
+assertEq(g.cols, 4, 'Throw (50×65), 12″ block, no border/sash → 4 cols');
+assertEq(g.rows, 5, 'Throw (50×65), 12″ block → 5 rows');
+assertEq(g.total, 20, '4×5 = 20 blocks');
+
+g = calcGrid(50, 65, 12, 3, 0);
+assertEq(g.cols, 3, '50″ - 6″ border = 44″ inner → 3 cols of 12″');
+assertEq(g.rows, 4, '65″ - 6″ border = 59″ inner → 4 rows of 12″');
+
+g = calcGrid(50, 65, 9, 1.5, 1.5);
+assertEq(g.cols, 4, '50″ / (9+1.5) = 4.76 → 4 cols with sashing');
+
+g = calcGrid(36, 52, 12, 0, 0);
+assertEq(g.cols, 3, 'Baby (36×52), 12″ → 3 cols');
+assertEq(g.rows, 4, 'Baby → 4 rows');
+assertEq(g.total, 12, '3×4 = 12 blocks');
+
+g = calcGrid(105, 96, 12, 4, 2);
+assertEq(g.cols, 7, 'King (105×96), 12″ block, 4″ border, 2″ sash → 7 cols');
+assertEq(g.rows, 6, 'King → 6 rows');
+
+section('📦 Strip Calculation (pieces per WOF)');
+assertEq(calcStripsNeeded(10, 3.5, 42), 1, '10 × 3½″ pieces across 42″ WOF = 12 per strip → 1 strip');
+assertEq(calcStripsNeeded(13, 3.5, 42), 2, '13 pieces → need 2 strips');
+assertEq(calcStripsNeeded(24, 3.5, 42), 2, '24 pieces across 42″ (12/strip) → 2 strips');
+assertEq(calcStripsNeeded(25, 3.5, 42), 3, '25 pieces → 3 strips');
+assertEq(calcStripsNeeded(4, 50, 42), 4, '50″ piece wider than 42″ WOF → 1 per strip → 4 strips');
+assertEq(calcStripsNeeded(1, 42, 42), 1, 'Exactly WOF width → 1 strip');
+
+section('🧵 Binding Calculation');
+assertEq(calcBinding(50, 65, 42, 2.5), 6, 'Throw perimeter = 2(50+65)+12 = 242″ → 242/42 = 6 strips');
+assertEq(calcBinding(105, 96, 42, 2.5), 10, 'King perimeter = 2(105+96)+12 = 414″ → 10 strips');
+assertEq(calcBinding(36, 52, 42, 2.5), 5, 'Baby perimeter = 2(36+52)+12 = 188″ → 5 strips');
+
+section('🔙 Backing Calculation');
+let bk = calcBacking(50, 65, 42);
+assert(bk >= 2, 'Throw backing ≥ 2 yards');
+assertClose(bk, Math.ceil(((73 * 2) / 36) * 8) / 8, 0.01, 'Throw: 58″ wide (>42) → 2 panels × 73″');
+
+bk = calcBacking(36, 52, 42);
+assertClose(bk, Math.ceil((60 / 36) * 8) / 8, 0.01, 'Baby: 44″ wide (>42) → 2 panels × 60″');
+
+bk = calcBacking(30, 40, 42);
+assertClose(bk, Math.ceil((48 / 36) * 8) / 8, 0.01, 'Small quilt: 38″ wide (≤42) → 1 panel × 48″');
+
+section('🧮 Full Yardage Scenario — Nine Patch Throw');
+{
+  const blockSz = 9, seam = 0.25, wof = 42, sashW = 1.5, borderW = 3;
+  const gr = calcGrid(50, 65, blockSz, borderW, sashW);
+  // Nine patch: 5 blue squares + 4 cream squares, each 3″ finished
+  const blueCS = cutSize({ type: 'square', finW: 3 }, seam);
+  const blueTotal = 5 * gr.total;
+  const blueStrips = calcStripsNeeded(blueTotal, blueCS.w, wof);
+  const blueInches = blueStrips * blueCS.h;
+  assert(blueCS.w === 3.5, 'Blue cut size = 3½″');
+  assert(blueTotal > 0, `Total blue pieces = ${blueTotal}`);
+  assert(blueStrips > 0, `Blue strips needed = ${blueStrips}`);
+  assert(blueInches > 0, `Blue fabric inches = ${blueInches}`);
+  const blueYards = blueInches / 36;
+  assert(blueYards < 5, `Blue yardage (${blueYards.toFixed(2)}) should be reasonable for a throw`);
+}
+
+section('🧮 Full Yardage Scenario — HST Pinwheel');
+{
+  const blockSz = 12, seam = 0.25, wof = 42;
+  const gr = calcGrid(60, 72, blockSz, 4, 2);
+  // 4 HSTs per block, 6″ finished
+  const hstCS = cutSize({ type: 'hst', finW: 6 }, seam);
+  const totalHSTs = 4 * gr.total;
+  const squaresNeeded = Math.ceil(totalHSTs / 2);
+  assertClose(hstCS.w, 6.875, 0.01, 'HST 6″ → 6⅞″ cut');
+  assert(squaresNeeded === totalHSTs / 2, `Need ${squaresNeeded} squares for ${totalHSTs} HSTs`);
+  const strips = calcStripsNeeded(squaresNeeded, hstCS.w, wof);
+  assert(strips > 0, `HST strips = ${strips}`);
+}
+
+section('🧮 Edge Cases');
+{
+  // Zero seam allowance
+  const cs0 = cutSize({ type: 'square', finW: 5 }, 0);
+  assertEq(cs0.w, 5, 'Zero seam → cut = finished size');
+
+  // Very large seam allowance
+  const csLg = cutSize({ type: 'square', finW: 3 }, 1);
+  assertEq(csLg.w, 5, '1″ seam → 3 + 2(1) = 5″ cut');
+
+  // Single block quilt
+  const g1 = calcGrid(12, 12, 12, 0, 0);
+  assertEq(g1.total, 1, '12×12″ quilt with 12″ block = 1 block');
+
+  // Block larger than quilt (should clamp to 1)
+  const gBig = calcGrid(10, 10, 15, 0, 0);
+  assertEq(gBig.total, 1, 'Block bigger than quilt → at least 1 block');
+
+  // Very small HST
+  const csSmall = cutSize({ type: 'hst', finW: 1 }, 0.25);
+  assertClose(csSmall.w, 1.875, 0.01, '1″ HST → 1⅞″ cut');
+}
+
+section('📊 Yardage Rounding Edge Cases');
+assertEq(yardsToFraction(0.124), '⅛', 'Just under ⅛ rounds up to ⅛');
+assertEq(yardsToFraction(0.126), '¼', 'Just over ⅛ rounds up to ¼');
+assertEq(yardsToFraction(0.251), '⅜', 'Just over ¼ rounds up to ⅜');
+assertEq(yardsToFraction(3.01), '3 ⅛', '3.01 → 3⅛ (rounds up)');
+assertEq(yardsToFraction(0.875), '⅞', '⅞ yard exact');
+assertEq(yardsToFraction(0.876), '1', 'Just over ⅞ rounds up to 1');
+
+// ══════════════════════════════════════
+// SUMMARY
+// ══════════════════════════════════════
+const total = passed + failed;
+out.innerHTML += `<div class="summary ${failed === 0 ? 'ok' : 'bad'}">
+  📊 ${passed}/${total} tests passed${failed > 0 ? ` — ${failed} FAILED` : ' — ALL PASSED! 🎉'}
+</div>`;
+</script>
+</body>
+</html>
