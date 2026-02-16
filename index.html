@@ -744,6 +744,33 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   }
   html += `</tbody></table></div>`;
 
+  // Precut Compatibility
+  html += `<div class="panel"><h2>🎁 Precut Compatibility</h2>`;
+  html += `<p style="font-size:0.85rem;color:#7a756e;margin-bottom:10px;">Can your pieces be cut from standard precut bundles?</p>`;
+  html += `<table class="fabric-table"><thead><tr><th>Precut Format</th><th>Size</th><th>Compatible Pieces</th><th>Status</th></tr></thead><tbody>`;
+
+  const precuts = [
+    { name: 'Charm Pack', w: 5, h: 5 },
+    { name: 'Layer Cake', w: 10, h: 10 },
+    { name: 'Jelly Roll', w: 2.5, h: 42 },
+    { name: 'Fat Quarter', w: 18, h: 22 },
+    { name: 'Fat Eighth', w: 9, h: 22 },
+  ];
+  precuts.forEach(pc => {
+    let compat = 0, total = blockPieces.length;
+    const compatPieces = [];
+    blockPieces.forEach(p => {
+      const cs = cutSize(p, seam);
+      const fits = (cs.w <= pc.w && cs.h <= pc.h) || (cs.w <= pc.h && cs.h <= pc.w);
+      if (fits) { compat++; compatPieces.push(p.name); }
+    });
+    const pct = total > 0 ? Math.round(100 * compat / total) : 0;
+    const status = pct === 100 ? '✅ All fit' : pct >= 50 ? '⚠️ Partial' : '❌ Too large';
+    const statusClass = pct === 100 ? 'color:#4a8c5c' : pct >= 50 ? 'color:#c87941' : 'color:#c0392b';
+    html += `<tr><td>${pc.name}</td><td>${pc.w}×${pc.h}″</td><td>${compat}/${total} pieces</td><td style="${statusClass};font-weight:bold;">${status}</td></tr>`;
+  });
+  html += `</tbody></table></div>`;
+
   area.innerHTML = html;
 
   drawBlockPreviewLarge();
