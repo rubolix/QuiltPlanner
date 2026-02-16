@@ -111,7 +111,8 @@ footer a { color: var(--teal); }
 
 @media print {
   body { background: #fff !important; color: #000 !important; font-size: 11pt; }
-  .no-print, #importModal, .modal { display: none !important; }
+  .no-print, #importModal, .modal, #printOptions { display: none !important; }
+  .print-hidden { display: none !important; }
   .panel { background: #fff !important; border: 1px solid #ccc !important; break-inside: avoid; box-shadow: none !important; margin-bottom: 12px; }
   .stat { background: #f5f5f5 !important; box-shadow: none !important; }
   .stat .val { color: #333 !important; }
@@ -270,6 +271,18 @@ footer a { color: var(--teal); }
     <button class="btn btn-outline" onclick="showImportModal()">📥 Import JSON</button>
     <button class="btn btn-outline" onclick="showCSVImportModal()">📥 Import CSV</button>
     <button class="btn btn-outline" onclick="exportPDF()">🖨️ Print / PDF</button>
+  </div>
+  <div id="printOptions" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+    <h2 style="font-size:0.9rem;color:var(--teal);margin-bottom:8px;">🖨️ Print Sections</h2>
+    <p style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">Uncheck sections you don't want in the printout.</p>
+    <label style="margin:0;"><input type="checkbox" class="print-toggle" data-section="print-stats" checked> Summary Stats</label>
+    <label style="margin:0;"><input type="checkbox" class="print-toggle" data-section="print-block-preview" checked> Block Preview</label>
+    <label style="margin:0;"><input type="checkbox" class="print-toggle" data-section="print-quilt-preview" checked> Quilt Preview</label>
+    <label style="margin:0;"><input type="checkbox" class="print-toggle" data-section="print-yardage" checked> Fabric Yardage</label>
+    <label style="margin:0;"><input type="checkbox" class="print-toggle" data-section="print-cutting-instructions" checked> Cutting Instructions</label>
+    <label style="margin:0;"><input type="checkbox" class="print-toggle" data-section="print-shopping-list" checked> Shopping List</label>
+    <label style="margin:0;"><input type="checkbox" class="print-toggle" data-section="print-cutting-layouts" checked> Cutting Layouts</label>
+    <label style="margin:0;"><input type="checkbox" class="print-toggle" data-section="print-precut-compat" checked> Precut Compatibility</label>
   </div>
 </div>
 </div>
@@ -796,7 +809,7 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   let html = '';
 
   // Stats
-  html += `<div class="stats">
+  html += `<div class="stats" id="print-stats">
     <div class="stat"><div class="val">${cols}×${rows}</div><div class="lbl">Block Grid</div></div>
     <div class="stat"><div class="val">${totalBlocks}</div><div class="lbl">Total Blocks</div></div>
     <div class="stat"><div class="val">${quiltW}×${quiltH}″</div><div class="lbl">Quilt Size</div></div>
@@ -804,13 +817,13 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   </div>`;
 
   // Block Preview
-  html += `<div class="panel"><h2>🧱 Block Preview</h2><div class="canvas-wrap"><canvas id="blockCanvas"></canvas></div></div>`;
+  html += `<div class="panel" id="print-block-preview"><h2>🧱 Block Preview</h2><div class="canvas-wrap"><canvas id="blockCanvas"></canvas></div></div>`;
 
   // Quilt Preview
-  html += `<div class="panel"><h2>🖼 Quilt Preview</h2><div class="canvas-wrap"><canvas id="quiltCanvas"></canvas></div></div>`;
+  html += `<div class="panel" id="print-quilt-preview"><h2>🖼 Quilt Preview</h2><div class="canvas-wrap"><canvas id="quiltCanvas"></canvas></div></div>`;
 
   // Yardage Table
-  html += `<div class="panel"><h2>📊 Fabric Yardage</h2>`;
+  html += `<div class="panel" id="print-yardage"><h2>📊 Fabric Yardage</h2>`;
   if (wastePct > 0) html += `<div class="waste-note">Includes ${Math.round(wastePct*100)}% waste margin for shrinkage and cutting errors.</div>`;
   html += `<table class="fabric-table">
     <thead><tr><th>Fabric</th><th></th><th>Yardage</th><th>Raw</th></tr></thead><tbody>`;
@@ -831,7 +844,7 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   html += `</tbody></table></div>`;
 
   // Cutting Instructions
-  html += `<div class="panel"><h2>✂️ Cutting Instructions</h2>`;
+  html += `<div class="panel" id="print-cutting-instructions"><h2>✂️ Cutting Instructions</h2>`;
   fabricList.forEach(f => {
     html += `<h3 style="color:var(--accent);font-size:0.95rem;margin-top:12px;margin-bottom:8px;">
       <span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${f.color};vertical-align:middle;margin-right:6px;border:1px solid rgba(0,0,0,0.15);"></span>
@@ -850,7 +863,7 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   html += `</div>`;
 
   // Shopping List
-  html += `<div class="panel"><h2>🛒 Shopping List</h2>`;
+  html += `<div class="panel" id="print-shopping-list"><h2>🛒 Shopping List</h2>`;
   html += `<table class="fabric-table"><thead><tr><th>Fabric</th><th>Buy</th></tr></thead><tbody>`;
   fabricList.forEach(f => {
     html += `<tr><td><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${f.color};vertical-align:middle;margin-right:6px;border:1px solid rgba(0,0,0,0.15);"></span>${esc(f.name)}</td><td><strong>${f.yardsDisplay} yd</strong></td></tr>`;
@@ -864,7 +877,7 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   html += `</tbody></table></div>`;
 
   // Cutting Layouts
-  html += `<div class="panel"><h2>✂️ Cutting Layouts</h2>`;
+  html += `<div class="panel" id="print-cutting-layouts"><h2>✂️ Cutting Layouts</h2>`;
   html += `<p style="font-size:0.85rem;color:var(--muted);margin-bottom:12px;">Visual strip layout for each fabric — pieces packed left-to-right in WOF strips.</p>`;
   fabricList.forEach((f, fi) => {
     html += `<h3 style="color:var(--accent);font-size:0.95rem;margin-top:12px;margin-bottom:8px;">
@@ -875,7 +888,7 @@ function renderResults(quiltW, quiltH, blockSz, rows, cols, totalBlocks, sashW, 
   html += `</div>`;
 
   // Precut Compatibility
-  html += `<div class="panel"><h2>🎁 Precut Compatibility</h2>`;
+  html += `<div class="panel" id="print-precut-compat"><h2>🎁 Precut Compatibility</h2>`;
   html += `<p style="font-size:0.85rem;color:#7a756e;margin-bottom:10px;">Can your pieces be cut from standard precut bundles?</p>`;
   html += `<table class="fabric-table"><thead><tr><th>Precut Format</th><th>Size</th><th>Compatible Pieces</th><th>Status</th></tr></thead><tbody>`;
 
@@ -1315,6 +1328,14 @@ function exportJSON() {
 
 function exportPDF() {
   calculate();
+  // Apply print section visibility from checkboxes
+  document.querySelectorAll('.print-toggle').forEach(cb => {
+    const el = document.getElementById(cb.dataset.section);
+    if (el) {
+      if (cb.checked) { el.classList.remove('print-hidden'); }
+      else { el.classList.add('print-hidden'); }
+    }
+  });
   window.print();
 }
 
